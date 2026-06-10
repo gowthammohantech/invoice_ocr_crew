@@ -21,22 +21,25 @@ export default function InvoiceDetailPage() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <Link href="/invoices" className="inline-flex items-center gap-1.5 text-zinc-500 hover:text-zinc-200 text-sm mb-4 transition-colors">
+        <Link
+          href="/invoices"
+          className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-900 text-sm mb-4 transition-colors"
+        >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Invoices
         </Link>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-white font-mono">{stem}</h1>
+          <h1 className="text-2xl font-semibold text-slate-900 font-mono">{stem}</h1>
           {isLoading ? (
-            <Skeleton className="h-5 w-16 bg-white/[0.05]" />
+            <Skeleton className="h-5 w-16" />
           ) : invoice ? (
             <Badge
               variant="outline"
               className={
                 passed === true
-                  ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10 gap-1"
+                  ? "border-emerald-200 text-emerald-700 bg-emerald-50 gap-1"
                   : passed === false
-                  ? "border-red-500/30 text-red-400 bg-red-500/10 gap-1"
-                  : "border-zinc-500/30 text-zinc-400 bg-zinc-500/10"
+                  ? "border-red-200 text-red-700 bg-red-50 gap-1"
+                  : "border-slate-200 text-slate-500 bg-slate-50"
               }
             >
               {passed === true ? <CheckCircle className="w-3 h-3" /> : passed === false ? <XCircle className="w-3 h-3" /> : null}
@@ -45,12 +48,14 @@ export default function InvoiceDetailPage() {
           ) : null}
         </div>
         {invoice?.vendor_name && (
-          <p className="text-zinc-500 text-sm mt-1">{invoice.vendor_name} — {invoice.invoice_number}</p>
+          <p className="text-slate-500 text-sm mt-1">
+            {invoice.vendor_name} — {invoice.invoice_number}
+          </p>
         )}
       </div>
 
       <Tabs defaultValue="ocr" className="space-y-4">
-        <TabsList className="bg-[#111] border border-white/[0.07] p-1 rounded-lg">
+        <TabsList className="bg-slate-100 border border-slate-200 p-1 rounded-lg">
           {[
             { value: "ocr", label: "OCR Text" },
             { value: "json", label: "Extracted Data" },
@@ -60,7 +65,7 @@ export default function InvoiceDetailPage() {
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="text-sm data-[state=active]:bg-violet-600/20 data-[state=active]:text-violet-300 data-[state=active]:border-violet-500/30 data-[state=active]:border text-zinc-500 rounded-md px-4 py-1.5"
+              className="text-sm data-[state=active]:bg-white data-[state=active]:text-violet-700 data-[state=active]:shadow-sm text-slate-500 rounded-md px-4 py-1.5"
             >
               {tab.label}
             </TabsTrigger>

@@ -8,7 +8,7 @@ export function useInvoiceList() {
   const { data, error, isLoading, mutate } = useSWR<{
     invoices: InvoiceSummary[];
     total: number;
-  }>("/api/invoices", fetcher);
+  }>("/api/invoices", fetcher, { revalidateOnFocus: true });
   return { invoices: data?.invoices ?? [], total: data?.total ?? 0, error, isLoading, mutate };
 }
 

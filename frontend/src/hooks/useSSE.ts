@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
 import { SSEEvent } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const SESSION_KEY = "invoice_sse_session";
 
 export function useSSE() {
   const [events, setEvents] = useState<SSEEvent[]>([]);
@@ -12,10 +13,33 @@ export function useSSE() {
   const [isDone, setIsDone] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 
+  // Restore from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (raw) {
+        const s: { events: SSEEvent[]; isDone: boolean } = JSON.parse(raw);
+        if (s.events?.length) setEvents(s.events);
+        if (s.isDone) setIsDone(true);
+      }
+    } catch {}
+  }, []);
+
+  // Persist to sessionStorage whenever events or isDone changes
+  useEffect(() => {
+    if (events.length === 0 && !isDone) return;
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ events, isDone }));
+    } catch {}
+  }, [events, isDone]);
+
   const start = useCallback(async (streamUrl: string) => {
     setEvents([]);
     setIsDone(false);
     setIsStreaming(true);
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {}
 
     const token = getToken();
     const url = `${API_BASE}${streamUrl}${token ? `?token=${token}` : ""}`;
@@ -74,6 +98,9 @@ export function useSSE() {
     setEvents([]);
     setIsDone(false);
     setIsStreaming(false);
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {}
   }, []);
 
   return { events, isStreaming, isDone, start, stop, reset };

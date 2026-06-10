@@ -50,14 +50,14 @@ export default function DropZone({ onFile, disabled }: Props) {
       />
 
       {selected ? (
-        <div className="flex items-center gap-3 bg-violet-500/10 border border-violet-500/25 rounded-xl p-4">
-          <FileText className="w-8 h-8 text-violet-400 flex-shrink-0" />
+        <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl p-4">
+          <FileText className="w-8 h-8 text-violet-600 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-zinc-200 truncate">{selected.name}</p>
-            <p className="text-xs text-zinc-500 mt-0.5">{(selected.size / 1024).toFixed(1)} KB</p>
+            <p className="text-sm font-medium text-slate-800 truncate">{selected.name}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{(selected.size / 1024).toFixed(1)} KB</p>
           </div>
           {!disabled && (
-            <button onClick={clear} className="text-zinc-500 hover:text-zinc-200 transition-colors">
+            <button onClick={clear} className="text-slate-400 hover:text-slate-700 transition-colors">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -73,17 +73,17 @@ export default function DropZone({ onFile, disabled }: Props) {
           className={cn(
             "w-full border-2 border-dashed rounded-xl p-12 flex flex-col items-center gap-3 transition-colors",
             dragging
-              ? "border-violet-500/60 bg-violet-500/10"
-              : "border-white/[0.1] bg-white/[0.02] hover:border-white/[0.2] hover:bg-white/[0.03]",
+              ? "border-violet-400 bg-violet-50"
+              : "border-slate-200 bg-slate-50 hover:border-violet-300 hover:bg-violet-50/50",
             disabled && "opacity-50 cursor-not-allowed"
           )}
         >
-          <div className="p-3 bg-violet-500/15 rounded-xl border border-violet-500/20">
-            <Upload className="w-6 h-6 text-violet-400" />
+          <div className="p-3 bg-violet-100 rounded-xl border border-violet-200">
+            <Upload className="w-6 h-6 text-violet-600" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-zinc-300">Drop invoice here or click to browse</p>
-            <p className="text-xs text-zinc-600 mt-1">PDF, PNG, JPG, HEIC, TIFF, WebP</p>
+            <p className="text-sm font-medium text-slate-700">Drop invoice here or click to browse</p>
+            <p className="text-xs text-slate-400 mt-1">PDF, PNG, JPG, HEIC, TIFF, WebP</p>
           </div>
         </button>
       )}

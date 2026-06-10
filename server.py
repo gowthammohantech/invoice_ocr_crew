@@ -352,15 +352,43 @@ async def stream_job(
         raise HTTPException(status_code=410, detail="Stream no longer available")
 
     async def _event_generator():
+        _iters = 0
+        _max_iters = 300  # 2 s × 300 = 10 min ceiling
         try:
-            while True:
-                payload = await asyncio.wait_for(queue.get(), timeout=120.0)
+            while _iters < _max_iters:
+                _iters += 1
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    # Heartbeat: detect job completion even when event-bus is silent
+                    job = _jobs.get(job_id, {})
+                    status = job.get("status", "pending")
+                    if status == "done":
+                        stem = job.get("stem", "")
+                        result_path = _find_result_path(stem)
+                        yield {"data": json.dumps({
+                            "type": "crew_completed",
+                            "file_stem": stem,
+                            "result_path": result_path,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        })}
+                        yield {"data": json.dumps({"type": "done"})}
+                        break
+                    elif status == "failed":
+                        yield {"data": json.dumps({
+                            "type": "crew_failed",
+                            "error": job.get("error", "Unknown error"),
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        })}
+                        yield {"data": json.dumps({"type": "done"})}
+                        break
+                    continue
                 if payload.get("type") == "done":
                     yield {"data": json.dumps({"type": "done"})}
                     break
                 yield {"data": json.dumps(payload)}
-        except asyncio.TimeoutError:
-            yield {"data": json.dumps({"type": "timeout", "message": "Processing timed out"})}
+            else:
+                yield {"data": json.dumps({"type": "timeout", "message": "Processing timed out"})}
         finally:
             _streams.pop(job_id, None)
 
