@@ -1,13 +1,14 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useInvoiceDetail, useInvoiceMeta, useReferenceImages } from "@/hooks/useInvoices";
+import { useInvoiceDetail, useInvoiceList, useInvoiceMeta, useReferenceImages } from "@/hooks/useInvoices";
 import { InvoiceDetail, LineItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -149,14 +150,14 @@ function RefValidationPanel({ stem, invoice }: { stem: string; invoice: InvoiceD
           <div className={cn(
             "flex items-center gap-2 px-3 py-2 rounded-lg mb-3 text-xs font-semibold",
             validation.passed === true  ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-            validation.passed === false ? "bg-red-50 text-red-700 border border-red-200" :
+            validation.passed === false ? "bg-amber-50 text-amber-700 border border-amber-200" :
             "bg-slate-50 text-slate-500 border border-slate-200"
           )}>
-            {validation.passed === true  && <CheckCircle  className="w-3.5 h-3.5 flex-shrink-0" />}
-            {validation.passed === false && <XCircle      className="w-3.5 h-3.5 flex-shrink-0" />}
-            {validation.passed == null   && <AlertCircle  className="w-3.5 h-3.5 flex-shrink-0" />}
+            {validation.passed === true  && <CheckCircle   className="w-3.5 h-3.5 flex-shrink-0" />}
+            {validation.passed === false && <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />}
+            {validation.passed == null   && <AlertCircle   className="w-3.5 h-3.5 flex-shrink-0" />}
             {validation.passed === true  ? "All checks passed" :
-             validation.passed === false ? "Validation failed" : "Inconclusive"}
+             validation.passed === false ? "Validation warning" : "Inconclusive"}
           </div>
 
           {/* Per-check rows */}
@@ -170,13 +171,13 @@ function RefValidationPanel({ stem, invoice }: { stem: string; invoice: InvoiceD
               return (
                 <div key={i} className={cn(
                   "flex items-start gap-2 px-2 py-1.5 rounded-md text-xs",
-                  passed ? "bg-emerald-50" : "bg-red-50"
+                  passed ? "bg-emerald-50" : "bg-amber-50"
                 )}>
                   {passed
-                    ? <CheckCircle className="w-3 h-3 text-emerald-500 mt-px flex-shrink-0" />
-                    : <XCircle    className="w-3 h-3 text-red-500 mt-px flex-shrink-0" />}
+                    ? <CheckCircle   className="w-3 h-3 text-emerald-500 mt-px flex-shrink-0" />
+                    : <AlertTriangle className="w-3 h-3 text-amber-500 mt-px flex-shrink-0" />}
                   <div className="min-w-0">
-                    <p className={cn("font-medium truncate", passed ? "text-emerald-700" : "text-red-700")}>{name}</p>
+                    <p className={cn("font-medium truncate", passed ? "text-emerald-700" : "text-amber-700")}>{name}</p>
                     {delta != null && (
                       <p className="text-[10px] text-slate-400 font-mono mt-0.5">
                         expected {fmt(expected)} · got {fmt(computed)} · Δ{fmt(delta)}
@@ -197,13 +198,29 @@ function RefValidationPanel({ stem, invoice }: { stem: string; invoice: InvoiceD
 
 export default function InvoiceDetailPage() {
   const { stem } = useParams<{ stem: string }>();
+  const router = useRouter();
   const { invoice, isLoading }  = useInvoiceDetail(stem);
   const { meta }                = useInvoiceMeta(stem);
+  const { invoices }            = useInvoiceList();
 
   const passed     = invoice?.validation?.passed;
   const filename   = meta?.filename;
   const pdfUrl     = filename ? `${API_BASE}/invoices/${filename}` : null;
   const confidence = invoice?.confidence_score;
+
+  const currentIndex = invoices.findIndex((inv) => inv.stem === stem);
+  const prevStem = currentIndex > 0 ? invoices[currentIndex - 1].stem : null;
+  const nextStem = currentIndex >= 0 && currentIndex < invoices.length - 1 ? invoices[currentIndex + 1].stem : null;
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "ArrowLeft"  && prevStem) router.push(`/invoices/${prevStem}`);
+      if (e.key === "ArrowRight" && nextStem) router.push(`/invoices/${nextStem}`);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prevStem, nextStem, router]);
 
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: "calc(100vh - 56px)" }}>
@@ -217,6 +234,29 @@ export default function InvoiceDetailPage() {
           Back
         </Link>
         <span className="text-slate-300">|</span>
+
+        {/* Prev / Next navigation */}
+        <button
+          onClick={() => prevStem && router.push(`/invoices/${prevStem}`)}
+          disabled={!prevStem}
+          title="Previous invoice (←)"
+          className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => nextStem && router.push(`/invoices/${nextStem}`)}
+          disabled={!nextStem}
+          title="Next invoice (→)"
+          className="p-1 rounded text-slate-400 hover:text-slate-700 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+        >
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+        {invoices.length > 0 && currentIndex >= 0 && (
+          <span className="text-[10px] text-slate-300 tabular-nums">{currentIndex + 1}/{invoices.length}</span>
+        )}
+
+        <span className="text-slate-300">|</span>
         <h1 className="text-sm font-semibold text-slate-800 font-mono">{stem}</h1>
         {isLoading ? (
           <Skeleton className="h-5 w-14" />
@@ -226,13 +266,13 @@ export default function InvoiceDetailPage() {
             className={cn(
               "text-xs gap-1 py-0",
               passed === true  ? "border-emerald-200 text-emerald-700 bg-emerald-50" :
-              passed === false ? "border-red-200 text-red-700 bg-red-50" :
+              passed === false ? "border-amber-200 text-amber-700 bg-amber-50" :
               "border-slate-200 text-slate-500 bg-slate-50"
             )}
           >
-            {passed === true  && <CheckCircle className="w-2.5 h-2.5" />}
-            {passed === false && <XCircle     className="w-2.5 h-2.5" />}
-            {passed === true ? "passed" : passed === false ? "failed" : "unknown"}
+            {passed === true  && <CheckCircle   className="w-2.5 h-2.5" />}
+            {passed === false && <AlertTriangle className="w-2.5 h-2.5" />}
+            {passed === true ? "passed" : passed === false ? "warning" : "unknown"}
           </Badge>
         ) : null}
         {confidence != null && (
@@ -240,8 +280,29 @@ export default function InvoiceDetailPage() {
             {(confidence * 100).toFixed(0)}% confidence
           </span>
         )}
+
+        {/* Vendor name + publish status */}
         {invoice?.vendor_name && (
-          <span className="text-xs text-slate-400 ml-auto">{invoice.vendor_name}</span>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-slate-600 font-medium">{invoice.vendor_name}</span>
+            {passed === true ? (
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 py-0 border-emerald-200 text-emerald-700 bg-emerald-50"
+              >
+                <CheckCircle className="w-2.5 h-2.5" />
+                published to Elixir Books
+              </Badge>
+            ) : passed === false ? (
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 py-0 border-amber-200 text-amber-700 bg-amber-50"
+              >
+                <AlertTriangle className="w-2.5 h-2.5" />
+                action needed
+              </Badge>
+            ) : null}
+          </div>
         )}
       </div>
 

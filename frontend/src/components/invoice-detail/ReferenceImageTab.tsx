@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { X, ZoomIn } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useReferenceImages } from "@/hooks/useInvoices";
 
@@ -7,6 +9,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function ReferenceImageTab({ stem }: { stem: string }) {
   const { images, isLoading, error } = useReferenceImages(stem);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   if (isLoading) return <Skeleton className="h-64 rounded-lg" />;
   if (error) return <p className="text-red-600 text-sm">Failed to check reference images.</p>;
@@ -20,18 +23,51 @@ export default function ReferenceImageTab({ stem }: { stem: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      {images.map((img) => (
-        <div key={img} className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-          <p className="text-xs text-slate-500 font-mono px-3 py-2 border-b border-slate-100 bg-slate-50">{img}</p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`${API_BASE}/reference/${img}`}
-            alt={img}
-            className="w-full object-contain max-h-[70vh]"
-          />
+    <>
+      <div className="space-y-4">
+        {images.map((img) => (
+          <div key={img} className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+            <p className="text-xs text-slate-500 font-mono px-3 py-2 border-b border-slate-100 bg-slate-50">{img}</p>
+            <div className="relative group cursor-zoom-in" onClick={() => setLightbox(img)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`${API_BASE}/reference/${img}`}
+                alt={img}
+                className="w-full object-contain max-h-[70vh]"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-full p-2 shadow-md">
+                  <ZoomIn className="w-5 h-5 text-slate-700" />
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 rounded-full p-2 transition-colors"
+            onClick={() => setLightbox(null)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="max-w-[95vw] max-h-[95vh] overflow-auto rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`${API_BASE}/reference/${lightbox}`}
+              alt={lightbox}
+              className="w-full h-auto"
+            />
+          </div>
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-xs font-mono">{lightbox}</p>
         </div>
-      ))}
-    </div>
+      )}
+    </>
   );
 }

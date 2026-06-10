@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { SSEEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -37,9 +37,9 @@ const STAGES = [
   },
   {
     id: "store",
-    name: "Storage",
-    role: "Invoice Storage Manager",
-    desc: "Save to database",
+    name: "Publish",
+    role: "Elixir Books Publisher",
+    desc: "Publish to Elixir Books",
     activeColor: "border-emerald-400 bg-emerald-50 shadow-sm shadow-emerald-100",
     dotColor:    "bg-emerald-500",
     labelColor:  "text-emerald-700",
@@ -84,7 +84,7 @@ function StageCard({
   const cardCls =
     state === "active" ? cn("border-2 transition-all duration-300", stage.activeColor) :
     state === "done"   ? "border border-emerald-200 bg-emerald-50" :
-    state === "failed" ? "border border-red-200 bg-red-50" :
+    state === "failed" ? "border border-amber-200 bg-amber-50" :
                          "border border-slate-200 bg-slate-50";
 
   return (
@@ -94,13 +94,13 @@ function StageCard({
         <div className="flex items-center gap-2">
           {state === "idle"   && <div className="w-2 h-2 rounded-full bg-slate-300" />}
           {state === "active" && <div className={cn("w-2 h-2 rounded-full animate-pulse", stage.dotColor)} />}
-          {state === "done"   && <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
-          {state === "failed" && <XCircle    className="w-4 h-4 text-red-500 flex-shrink-0" />}
+          {state === "done"   && <CheckCircle   className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+          {state === "failed" && <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
           <span className={cn(
             "text-sm font-semibold",
             state === "active" ? stage.labelColor :
             state === "done"   ? "text-emerald-700" :
-            state === "failed" ? "text-red-700" :
+            state === "failed" ? "text-amber-700" :
             "text-slate-400"
           )}>
             {stage.name}
@@ -123,7 +123,7 @@ function StageCard({
 
       {/* Status label */}
       {state === "done"   && <span className="text-[11px] font-medium text-emerald-600">Complete</span>}
-      {state === "failed" && <span className="text-[11px] font-medium text-red-600">Failed</span>}
+      {state === "failed" && <span className="text-[11px] font-medium text-amber-600">Warning</span>}
       {state === "active" && !tool && (
         <span className={cn("text-[11px] font-medium", stage.labelColor)}>Running…</span>
       )}
@@ -138,10 +138,11 @@ interface Props {
   isStreaming: boolean;
   isDone: boolean;
   fileStem?: string;
+  isPending?: boolean;
 }
 
-export default function ExecutionTimeline({ events, isStreaming, isDone, fileStem }: Props) {
-  if (events.length === 0 && !isStreaming && !isDone) return null;
+export default function ExecutionTimeline({ events, isStreaming, isDone, fileStem, isPending }: Props) {
+  if (events.length === 0 && !isStreaming && !isDone && !isPending) return null;
 
   const crewCompleted = events.find(e => e.type === "crew_completed");
   const crewFailed    = events.find(e => e.type === "crew_failed");
@@ -153,6 +154,12 @@ export default function ExecutionTimeline({ events, isStreaming, isDone, fileSte
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-700">Pipeline</h3>
+        {isPending && !isStreaming && (
+          <span className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Pending
+          </span>
+        )}
         {isStreaming && (
           <span className="flex items-center gap-1.5 text-xs text-violet-600 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
@@ -169,6 +176,19 @@ export default function ExecutionTimeline({ events, isStreaming, isDone, fileSte
         <div className="flex items-center gap-2 py-3 text-sm text-slate-400">
           <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
           Connecting to agent stream…
+        </div>
+      ) : events.length === 0 && isPending ? (
+        <div className="flex items-stretch gap-2">
+          {STAGES.map((stage, i) => (
+            <div key={stage.id} className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="flex-1 min-w-0">
+                <StageCard stage={stage} state="idle" tool={null} isStreaming={false} />
+              </div>
+              {i < STAGES.length - 1 && (
+                <span className="text-slate-300 text-lg flex-shrink-0 select-none">›</span>
+              )}
+            </div>
+          ))}
         </div>
       ) : (
         <div className="flex items-stretch gap-2">
@@ -198,7 +218,7 @@ export default function ExecutionTimeline({ events, isStreaming, isDone, fileSte
       {(allDone || crewFailed) && (
         <div className={cn(
           "mt-4 pt-4 border-t border-slate-100 flex items-center gap-3 p-3 rounded-lg",
-          allDone ? "bg-emerald-50 border border-emerald-200" : "bg-red-50 border border-red-200"
+          allDone ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"
         )}>
           {allDone ? (
             <>
@@ -215,9 +235,9 @@ export default function ExecutionTimeline({ events, isStreaming, isDone, fileSte
             </>
           ) : (
             <>
-              <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-700 flex-1">
-                Processing failed{crewFailed?.error ? `: ${crewFailed.error}` : ""}
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <p className="text-sm text-amber-700 flex-1">
+                Processing warning{crewFailed?.error ? `: ${crewFailed.error}` : ""}
               </p>
             </>
           )}

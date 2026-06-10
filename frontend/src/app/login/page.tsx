@@ -25,7 +25,7 @@ export default function LoginPage() {
     try {
       const res = await api.post("/auth/login", { token });
       setToken(res.data.access_token);
-      router.replace("/dashboard");
+      router.replace("/");
     } catch {
       setError("Invalid access token. Please try again.");
     } finally {

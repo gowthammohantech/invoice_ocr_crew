@@ -5,7 +5,7 @@ import AppShell from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
   title: "Elixir Global — Agent Sandbox",
-  description: "Invoice OCR Agent powered by CrewAI",
+  description: "Invoice OCR Agent powered by Elixir Global",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

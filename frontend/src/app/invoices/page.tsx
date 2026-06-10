@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle, XCircle, ExternalLink } from "lucide-react";
+import { CheckCircle, AlertTriangle, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -65,14 +65,14 @@ export default function InvoicesPage() {
                       className={
                         inv.status === "pass"
                           ? "border-emerald-200 text-emerald-700 bg-emerald-50 text-xs gap-1"
-                          : "border-red-200 text-red-700 bg-red-50 text-xs gap-1"
+                          : "border-amber-200 text-amber-700 bg-amber-50 text-xs gap-1"
                       }
                     >
                       {inv.status === "pass"
-                        ? <CheckCircle className="w-3 h-3" />
-                        : <XCircle className="w-3 h-3" />
+                        ? <CheckCircle   className="w-3 h-3" />
+                        : <AlertTriangle className="w-3 h-3" />
                       }
-                      {inv.status}
+                      {inv.status === "pass" ? "pass" : "warning"}
                     </Badge>
                   </TableCell>
                   <TableCell>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bot, FileSearch, ArrowRight, LogOut } from "lucide-react";
 import { clearToken, getToken } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface Agent {
   id: string;
@@ -32,14 +33,18 @@ const AGENTS: Agent[] = [
 ];
 
 const COMING_SOON = [
-  { name: "Contract Review Agent",   desc: "Extract clauses, obligations and risk flags from legal contracts." },
-  { name: "Purchase Order Agent",    desc: "Match POs to invoices and flag discrepancies automatically." },
-  { name: "Bank Statement Agent",    desc: "Reconcile bank transactions and categorise expenses." },
+  { name: "Contract Review Agent", desc: "Extract clauses, obligations and risk flags from legal contracts." },
+  { name: "Purchase Order Agent", desc: "Match POs to invoices and flag discrepancies automatically." },
+  { name: "Bank Statement Agent", desc: "Reconcile bank transactions and categorise expenses." },
 ];
 
 export default function AgentsHome() {
   const router = useRouter();
-  const isLoggedIn = !!getToken();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(!!getToken());
+  }, []);
 
   function handleLogout() {
     clearToken();
@@ -83,7 +88,7 @@ export default function AgentsHome() {
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Agent Hub</h1>
         <p className="text-slate-500 text-sm max-w-lg">
           Select an agent to launch its workspace. Each agent runs an automated multi-step
-          pipeline powered by CrewAI.
+          pipeline powered by Elixir Global.
         </p>
       </div>
 
