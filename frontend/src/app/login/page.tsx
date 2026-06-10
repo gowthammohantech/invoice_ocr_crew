@@ -58,7 +58,7 @@ export default function LoginPage() {
             />
           </div>
           <p className="text-sm text-violet-400/80 font-medium tracking-widest uppercase">Agent Sandbox</p>
-          <p className="text-sm text-zinc-500 mt-2">Invoice OCR Crew — Powered by CrewAI</p>
+          <p className="text-sm text-zinc-500 mt-2">Invoice OCR Crew — Powered by Elixir Global</p>
         </div>
 
         {/* Card */}

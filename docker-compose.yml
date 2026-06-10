@@ -1,0 +1,48 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # When Ollama runs on the host, point at the Docker host gateway
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-http://host.docker.internal:11434/api/chat}
+    volumes:
+      - invoice_data:/app/invoice_data
+      - invoice_raw:/app/invoice_raw_data
+      - invoices:/app/invoices
+      - traces:/app/invoice_traces
+      - logs:/app/logs
+      - reference:/app/reference
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Points the browser at the host's exposed backend port
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  invoice_data:
+  invoice_raw:
+  invoices:
+  traces:
+  logs:
+  reference:
