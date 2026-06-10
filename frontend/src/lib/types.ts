@@ -52,6 +52,13 @@ export interface InvoiceDetail {
   confidence_score?: number;
 }
 
+export interface InvoiceMeta {
+  stem: string;
+  filename: string;
+  status: "pass" | "failed";
+  created_at: string;
+}
+
 export interface SSEEvent {
   type:
     | "crew_started"
@@ -62,6 +69,7 @@ export interface SSEEvent {
     | "tool_finished"
     | "crew_completed"
     | "crew_failed"
+    | "fields_update"
     | "done"
     | "timeout";
   ts?: string;

@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 const PAGE_TITLES: [string, string][] = [
   ["/process", "Process Invoice"],
   ["/invoices", "Invoices"],
-  ["/logs", "Agent Logs"],
   ["/dashboard", "Dashboard"],
 ];
 

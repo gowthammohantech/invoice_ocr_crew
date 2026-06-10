@@ -8,12 +8,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const SESSION_KEY = "invoice_sse_session";
 
 export function useSSE() {
-  const [events, setEvents] = useState<SSEEvent[]>([]);
+  const [events, setEvents]       = useState<SSEEvent[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isDone, setIsDone] = useState(false);
-  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const [isDone, setIsDone]       = useState(false);
+  const esRef = useRef<EventSource | null>(null);
 
-  // Restore from sessionStorage on mount
+  // Restore persisted events on mount (for tab-switch resilience)
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(SESSION_KEY);
@@ -25,7 +25,7 @@ export function useSSE() {
     } catch {}
   }, []);
 
-  // Persist to sessionStorage whenever events or isDone changes
+  // Persist whenever events/isDone change
   useEffect(() => {
     if (events.length === 0 && !isDone) return;
     try {
@@ -33,74 +33,63 @@ export function useSSE() {
     } catch {}
   }, [events, isDone]);
 
-  const start = useCallback(async (streamUrl: string) => {
+  /**
+   * Connect to an SSE stream using the native EventSource API.
+   * Each `onmessage` fires in its own event-loop turn, so React
+   * re-renders between events — giving true real-time stage updates.
+   */
+  const start = useCallback((streamUrl: string) => {
+    // Close any stale connection
+    esRef.current?.close();
+    esRef.current = null;
+
     setEvents([]);
     setIsDone(false);
     setIsStreaming(true);
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {}
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
 
     const token = getToken();
-    const url = `${API_BASE}${streamUrl}${token ? `?token=${token}` : ""}`;
+    const url   = `${API_BASE}${streamUrl}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
 
-    try {
-      const res = await fetch(url, { method: "GET" });
-      if (!res.ok || !res.body) {
-        setIsStreaming(false);
-        return;
-      }
+    const es = new EventSource(url);
+    esRef.current = es;
 
-      const reader = res.body.getReader();
-      readerRef.current = reader;
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (line.startsWith("data:")) {
-            const raw = line.slice(5).trim();
-            if (!raw) continue;
-            try {
-              const evt: SSEEvent = JSON.parse(raw);
-              if (evt.type === "done") {
-                setIsDone(true);
-                setIsStreaming(false);
-                return;
-              }
-              setEvents((prev) => [...prev, evt]);
-            } catch {
-              // skip malformed lines
-            }
-          }
+    es.onmessage = (event) => {
+      try {
+        const evt: SSEEvent = JSON.parse(event.data);
+        if (evt.type === "done") {
+          setIsDone(true);
+          setIsStreaming(false);
+          es.close();
+          esRef.current = null;
+          return;
         }
-      }
-    } catch {
-      // connection closed or error
-    } finally {
+        // One setState per event → one render per event
+        setEvents((prev) => [...prev, evt]);
+      } catch {}
+    };
+
+    es.onerror = () => {
+      // EventSource would auto-reconnect; we close deliberately instead
       setIsStreaming(false);
-    }
+      es.close();
+      esRef.current = null;
+    };
   }, []);
 
   const stop = useCallback(() => {
-    readerRef.current?.cancel();
+    esRef.current?.close();
+    esRef.current = null;
     setIsStreaming(false);
   }, []);
 
   const reset = useCallback(() => {
+    esRef.current?.close();
+    esRef.current = null;
     setEvents([]);
     setIsDone(false);
     setIsStreaming(false);
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {}
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
   }, []);
 
   return { events, isStreaming, isDone, start, stop, reset };

@@ -3,20 +3,19 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Upload, FileText, ScrollText, LogOut } from "lucide-react";
+import { LayoutDashboard, Upload, FileText, LogOut, ChevronLeft, Bot } from "lucide-react";
 import { clearToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/process", label: "Process Invoice", icon: Upload },
-  { href: "/invoices", label: "Invoices", icon: FileText },
-  { href: "/logs", label: "Agent Logs", icon: ScrollText },
+  { href: "/dashboard", label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/process",   label: "Process Invoice",  icon: Upload },
+  { href: "/invoices",  label: "Invoices",          icon: FileText },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
 
   function handleLogout() {
     clearToken();
@@ -41,30 +40,47 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
-                active
-                  ? "bg-violet-50 text-violet-700 border border-violet-200"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              )}
-            >
-              <Icon
+      <nav className="flex-1 px-3 py-4">
+        {/* Back to agents hub */}
+        <Link
+          href="/"
+          className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors group"
+        >
+          <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+          All Agents
+        </Link>
+
+        {/* Agent section label */}
+        <div className="flex items-center gap-2 px-3 mb-2">
+          <div className="w-5 h-5 rounded-md bg-violet-100 flex items-center justify-center flex-shrink-0">
+            <Bot className="w-3 h-3 text-violet-600" />
+          </div>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 truncate">
+            Invoice OCR Agent
+          </span>
+        </div>
+
+        {/* Module items */}
+        <div className="ml-3 pl-3 border-l border-slate-100 space-y-0.5">
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || pathname.startsWith(href + "/");
+            return (
+              <Link
+                key={href}
+                href={href}
                 className={cn(
-                  "w-4 h-4",
-                  active ? "text-violet-600" : "text-slate-400"
+                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                  active
+                    ? "bg-violet-50 text-violet-700 border border-violet-200"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                 )}
-              />
-              {label}
-            </Link>
-          );
-        })}
+              >
+                <Icon className={cn("w-4 h-4", active ? "text-violet-600" : "text-slate-400")} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       {/* Footer */}

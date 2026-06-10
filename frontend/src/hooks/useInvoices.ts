@@ -1,6 +1,6 @@
 import useSWR from "swr";
 import api from "@/lib/api";
-import { InvoiceDetail, InvoiceSummary, TraceEntry } from "@/lib/types";
+import { InvoiceDetail, InvoiceMeta, InvoiceSummary, TraceEntry } from "@/lib/types";
 
 const fetcher = (url: string) => api.get(url).then((r) => r.data);
 
@@ -18,6 +18,14 @@ export function useInvoiceDetail(stem: string | null) {
     fetcher
   );
   return { invoice: data, error, isLoading };
+}
+
+export function useInvoiceMeta(stem: string | null) {
+  const { data, error, isLoading } = useSWR<InvoiceMeta>(
+    stem ? `/api/invoice/${stem}/meta` : null,
+    fetcher
+  );
+  return { meta: data, error, isLoading };
 }
 
 export function useRawText(stem: string | null) {

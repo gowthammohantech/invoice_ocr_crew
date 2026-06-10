@@ -7,7 +7,7 @@ import TopBar from "./TopBar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLogin = pathname === "/login";
+  const isFullscreen = pathname === "/login" || pathname === "/";
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
@@ -23,7 +23,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     });
   }
 
-  if (isLogin) return <>{children}</>;
+  if (isFullscreen) return <>{children}</>;
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">

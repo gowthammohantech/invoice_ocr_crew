@@ -39,6 +39,7 @@ class StorageTool(BaseTool):
         validation = data.get("validation") or {}
         # Only route to failed/ when passed is explicitly False
         passed = validation.get("passed") is not False
+        status = "pass" if passed else "failed"
         dest_dir = config.JSON_PASS_DIR if passed else config.JSON_FAIL_DIR
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_path = dest_dir / f"{stem}.json"
@@ -46,7 +47,20 @@ class StorageTool(BaseTool):
         try:
             with open(dest_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            status = "pass" if passed else "failed"
-            return f"Saved to {dest_path} [{status}]"
         except Exception as e:
             return f"ERROR: Failed to write file: {e}"
+
+        # Save to SQLite
+        try:
+            import db as _db
+            filename = f"{stem}.pdf"
+            for ext in (".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp", ".heic", ".heif"):
+                candidate = config.INVOICES_DIR / f"{stem}{ext}"
+                if candidate.exists():
+                    filename = candidate.name
+                    break
+            _db.save_invoice(stem, filename, data, status)
+        except Exception:
+            pass
+
+        return f"Saved to {dest_path} [{status}]"

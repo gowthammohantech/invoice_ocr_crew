@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Invoice OCR — Process</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    background: #1a1d27;
+    border-bottom: 1px solid #2d3148;
+    flex-shrink: 0;
+    min-height: 48px;
+  }
+  .back-link {
+    font-size: 12px; color: #6366f1; text-decoration: none;
+    opacity: .8; transition: opacity .15s;
+    padding: 4px 10px; border: 1px solid #3d4166; border-radius: 6px;
+  }
+  .back-link:hover { opacity: 1; background: #1e2235; }
+
+  header h1 { font-size: 15px; font-weight: 600; color: #a5b4fc; letter-spacing: .4px; }
+
+  .spacer { flex: 1; }
+
+  /* Pipeline stage badges */
+  .pipeline {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .stage {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: #475569; padding: 3px 8px;
+    border-radius: 20px; border: 1px solid #2d3148;
+    transition: color .3s, border-color .3s, background .3s;
+  }
+  .stage .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #2d3148; transition: background .3s;
+  }
+  .stage.active {
+    color: #e2e8f0; border-color: currentColor;
+  }
+  .stage.active .dot { animation: pulse 1s ease-in-out infinite; }
+  .stage.done   { color: #6ee7b7; border-color: #064e3b; background: #022c22; }
+  .stage.done   .dot { background: #6ee7b7; animation: none; }
+  .stage.failed { color: #fca5a5; border-color: #450a0a; background: #1c0505; }
+  .stage.failed .dot { background: #fca5a5; animation: none; }
+
+  .stage.ocr.active     { color: #93c5fd; border-color: #1e3a5f; }
+  .stage.ocr.active .dot { background: #93c5fd; }
+  .stage.extract.active { color: #c4b5fd; border-color: #3b2872; }
+  .stage.extract.active .dot { background: #c4b5fd; }
+  .stage.validate.active { color: #fde68a; border-color: #713f12; }
+  .stage.validate.active .dot { background: #fde68a; }
+  .stage.store.active   { color: #6ee7b7; border-color: #064e3b; }
+  .stage.store.active .dot { background: #6ee7b7; }
+
+  .stage-arrow { color: #2d3148; font-size: 10px; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: .5; transform: scale(.8); }
+  }
+
+  /* Upload button */
+  .upload-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 6px;
+    background: #4f46e5; color: #fff;
+    border: none; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: background .15s;
+  }
+  .upload-btn:hover { background: #4338ca; }
+  .upload-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .upload-btn svg { flex-shrink: 0; }
+
+  /* ── 3-column layout ── */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 360px 1fr;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .panel {
+    display: flex; flex-direction: column;
+    overflow: hidden; border-right: 1px solid #2d3148;
+  }
+  .panel:last-child { border-right: none; }
+
+  .panel-header {
+    padding: 8px 14px;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .8px;
+    color: #64748b; background: #161822;
+    border-bottom: 1px solid #2d3148;
+    flex-shrink: 0;
+  }
+
+  .panel-body { flex: 1; overflow: auto; min-height: 0; }
+
+  /* ── Drop zone ── */
+  .dropzone {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: 100%; gap: 12px;
+    border: 2px dashed #2d3148;
+    color: #475569; font-size: 13px;
+    cursor: pointer; transition: border-color .2s, color .2s;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: #4f46e5; color: #a5b4fc;
+  }
+  .dropzone input { display: none; }
+  .dropzone svg { opacity: .5; transition: opacity .2s; }
+  .dropzone:hover svg { opacity: .8; }
+  .dropzone .hint { font-size: 11px; color: #374151; }
+
+  /* PDF frame */
+  #pdf-frame { width: 100%; height: 100%; border: none; background: #fff; }
+
+  /* ── Fields panel ── */
+  #fields-panel .panel-body { padding: 14px; }
+
+  .section-title {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px;
+    color: #6366f1; margin: 14px 0 6px;
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 4px 8px;
+    padding: 5px 6px;
+    border-radius: 4px;
+    border-bottom: 1px solid #1a1c2a;
+    align-items: start;
+    opacity: .3;
+    transition: opacity .4s ease, background .5s ease;
+  }
+  .field-row.filled  { opacity: 1; }
+  .field-row.flash   { opacity: 1; background: rgba(99,102,241,.18); }
+  .field-row.valid   { background: rgba(16, 80, 50, .25); opacity: 1; }
+  .field-row.invalid { background: rgba(100, 20, 20, .25); opacity: 1; }
+
+  .field-label { font-size: 11px; color: #64748b; font-weight: 500; padding-top: 1px; }
+  .field-value { font-size: 12px; color: #e2e8f0; word-break: break-word; }
+  .field-value.null-val { color: #374151; font-style: italic; }
+  .field-value.amount   { font-family: "SF Mono", "Fira Code", monospace; color: #a5f3fc; }
+
+  /* Line items (compact) */
+  .line-items-table {
+    width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px;
+  }
+  .line-items-table th {
+    text-align: left; color: #475569; font-weight: 600;
+    padding: 3px 5px; border-bottom: 1px solid #2d3148;
+  }
+  .line-items-table td {
+    padding: 4px 5px; border-bottom: 1px solid #1e2235;
+    color: #cbd5e1; vertical-align: top;
+  }
+  .num-cell { text-align: right; font-family: "SF Mono", monospace; }
+
+  /* Validation checks */
+  .check-row { display: flex; gap: 6px; align-items: center; padding: 3px 6px; font-size: 11px; }
+  .check-icon { font-size: 13px; }
+  .check-name { color: #94a3b8; flex: 1; }
+  .check-detail { font-family: "SF Mono", monospace; font-size: 10px; color: #64748b; }
+
+  /* Reference */
+  #ref-img { max-width: 100%; display: block; }
+
+  .empty-state {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; color: #374151; font-size: 13px;
+  }
+
+  /* Auth modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .modal {
+    background: #1a1d27; border: 1px solid #3d4166;
+    border-radius: 12px; padding: 28px 32px;
+    width: 360px;
+  }
+  .modal h2 { font-size: 16px; font-weight: 600; color: #a5b4fc; margin-bottom: 6px; }
+  .modal p  { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+  .modal input {
+    width: 100%; padding: 8px 12px; border-radius: 6px;
+    background: #252836; border: 1px solid #3d4166;
+    color: #e2e8f0; font-size: 13px; margin-bottom: 12px;
+    outline: none;
+  }
+  .modal input:focus { border-color: #6366f1; }
+  .modal-err { font-size: 12px; color: #fca5a5; margin-bottom: 8px; }
+  .modal button {
+    width: 100%; padding: 8px; border-radius: 6px;
+    background: #4f46e5; color: #fff; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .modal button:hover { background: #4338ca; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3d4166; }
+</style>
+</head>
+<body>
+
+<!-- Auth modal -->
+<div class="modal-overlay" id="auth-modal" style="display:none">
+  <div class="modal">
+    <h2>Sign In</h2>
+    <p>Enter your access token to start processing invoices.</p>
+    <div class="modal-err" id="auth-err" style="display:none"></div>
+    <input type="password" id="auth-input" placeholder="Access token" autocomplete="off" />
+    <button id="auth-btn">Continue</button>
+  </div>
+</div>
+
+<header>
+  <a href="/" class="back-link">← Invoices</a>
+  <h1>Live Processing</h1>
+  <div class="spacer"></div>
+
+  <div class="pipeline">
+    <div class="stage ocr"      id="s-ocr">      <span class="dot"></span>OCR</div>
+    <div class="stage-arrow">›</div>
+    <div class="stage extract"  id="s-extract">  <span class="dot"></span>Extract</div>
+    <div class="stage-arrow">›</div>
+    <div class="stage validate" id="s-validate"> <span class="dot"></span>Validate</div>
+    <div class="stage-arrow">›</div>
+    <div class="stage store"    id="s-store">    <span class="dot"></span>Store</div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <button class="upload-btn" id="upload-btn">
+    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+    </svg>
+    Upload Invoice
+  </button>
+  <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.webp,.heic,.heif" style="display:none" />
+</header>
+
+<main>
+  <!-- Col 1: Invoice file -->
+  <div class="panel" id="invoice-panel">
+    <div class="panel-header">Invoice</div>
+    <div class="panel-body" style="padding:0" id="invoice-body">
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="dz-input" accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.webp,.heic,.heif" />
+        <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <span>Drop invoice here or click to browse</span>
+        <span class="hint">PDF, PNG, JPG, HEIC supported</span>
+      </div>
+      <iframe id="pdf-frame" style="display:none; width:100%; height:100%; border:none; background:#fff"></iframe>
+    </div>
+  </div>
+
+  <!-- Col 2: Live extracted fields -->
+  <div class="panel" id="fields-panel">
+    <div class="panel-header">Extracted Fields</div>
+    <div class="panel-body" id="fields-body">
+      <!-- Pre-rendered field skeleton — populated by JS -->
+    </div>
+  </div>
+
+  <!-- Col 3: Reference image -->
+  <div class="panel" id="ref-panel">
+    <div class="panel-header">Reference Image</div>
+    <div class="panel-body" id="ref-body">
+      <div class="empty-state" id="ref-placeholder">Reference appears after OCR</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const API = '';
+const TOKEN_KEY = 'inv_token';
+
+let token     = localStorage.getItem(TOKEN_KEY) || '';
+let currentStem = '';
+let currentFilename = '';
+let es = null;
+
+// ── Field definitions ─────────────────────────────────────────────────────
+
+const FIELD_DEFS = [
+  ['Invoice Details', [
+    ['invoice_number', 'Invoice #',     false],
+    ['invoice_date',   'Date',          false],
+    ['due_date',       'Due Date',      false],
+    ['po_number',      'PO Number',     false],
+    ['currency',       'Currency',      false],
+    ['payment_terms',  'Payment Terms', false],
+  ]],
+  ['Vendor', [
+    ['vendor_name',    'Name',    false],
+    ['vendor_gstin',   'GSTIN',   false],
+    ['vendor_address', 'Address', false],
+  ]],
+  ['Customer', [
+    ['customer_name',  'Name',  false],
+    ['customer_gstin', 'GSTIN', false],
+  ]],
+  ['Amounts', [
+    ['subtotal',        'Subtotal',    true],
+    ['discount_amount', 'Discount',   true],
+    ['tax_amount',      'Tax Total',  true],
+    ['cgst_amount',     'CGST',       true],
+    ['sgst_amount',     'SGST',       true],
+    ['igst_amount',     'IGST',       true],
+    ['grand_total',     'Grand Total',true],
+  ]],
+  ['Bank', [
+    ['bank_name',      'Bank Name',   false],
+    ['account_number', 'Account #',  false],
+    ['ifsc_swift',     'IFSC/SWIFT', false],
+  ]],
+];
+
+// ── Build field skeleton ──────────────────────────────────────────────────
+
+function buildFields() {
+  const body = document.getElementById('fields-body');
+  body.innerHTML = '';
+  FIELD_DEFS.forEach(([section, fields]) => {
+    const sec = document.createElement('div');
+    sec.className = 'section-title';
+    sec.textContent = section;
+    body.appendChild(sec);
+    fields.forEach(([key, label, isAmt]) => {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      row.id = `fr-${key}`;
+      row.innerHTML = `
+        <span class="field-label">${label}</span>
+        <span class="field-value null-val fv-${key}">—</span>`;
+      body.appendChild(row);
+    });
+  });
+
+  // Placeholder for line items and validation (added dynamically)
+  const liSec = document.createElement('div');
+  liSec.id = 'line-items-section';
+  body.appendChild(liSec);
+
+  const valSec = document.createElement('div');
+  valSec.id = 'validation-section';
+  body.appendChild(valSec);
+}
+
+// ── Apply fields_update data ──────────────────────────────────────────────
+
+function applyFields(data) {
+  FIELD_DEFS.forEach(([, fields]) => {
+    fields.forEach(([key, , isAmt]) => {
+      const row  = document.getElementById(`fr-${key}`);
+      const valEl = row?.querySelector(`.fv-${key}`);
+      if (!row || !valEl) return;
+      const val = data[key];
+      if (val != null && val !== '') {
+        valEl.textContent = isAmt ? fmt(val) : esc(String(val));
+        valEl.className   = `field-value${isAmt ? ' amount' : ''}`;
+        row.classList.remove('filled');
+        row.classList.add('flash');
+        setTimeout(() => {
+          row.classList.remove('flash');
+          row.classList.add('filled');
+        }, 700);
+      }
+    });
+  });
+
+  // Line items
+  if (data.line_items?.length) {
+    const sec = document.getElementById('line-items-section');
+    sec.innerHTML = `<div class="section-title">Line Items</div>`;
+    const tbl = document.createElement('table');
+    tbl.className = 'line-items-table';
+    tbl.innerHTML = `<thead><tr>
+      <th>Description</th><th>HSN</th>
+      <th class="num-cell">Qty</th><th class="num-cell">Unit Price</th>
+      <th class="num-cell">Tax%</th><th class="num-cell">Amount</th>
+    </tr></thead>`;
+    const tbody = document.createElement('tbody');
+    data.line_items.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${esc(item.description || '—')}</td>
+        <td>${item.hsn_sac_code || '—'}</td>
+        <td class="num-cell">${item.quantity ?? '—'}</td>
+        <td class="num-cell">${item.unit_price != null ? fmt(item.unit_price) : '—'}</td>
+        <td class="num-cell">${item.tax_rate   != null ? item.tax_rate + '%' : '—'}</td>
+        <td class="num-cell">${item.amount     != null ? fmt(item.amount) : '—'}</td>`;
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    sec.appendChild(tbl);
+  }
+}
+
+function applyValidation(validation) {
+  const sec = document.getElementById('validation-section');
+  if (!validation || !sec) return;
+  sec.innerHTML = `<div class="section-title">Validation</div>`;
+  (validation.checks || []).forEach(check => {
+    const icon   = check.passed ? '✅' : '❌';
+    const detail = check.delta != null
+      ? `expected ${fmt(check.expected)} · got ${fmt(check.computed)} · Δ${fmt(check.delta)}`
+      : '';
+    sec.insertAdjacentHTML('beforeend', `
+      <div class="check-row">
+        <span class="check-icon">${icon}</span>
+        <span class="check-name">${esc(check.name)}</span>
+        <span class="check-detail">${detail}</span>
+      </div>`);
+  });
+
+  // Tint grand_total row based on overall pass/fail
+  const totalRow = document.getElementById('fr-grand_total');
+  if (totalRow) {
+    totalRow.classList.remove('flash', 'filled');
+    totalRow.classList.add(validation.passed ? 'valid' : 'invalid');
+  }
+}
+
+// ── Pipeline stage helpers ────────────────────────────────────────────────
+
+const STAGE_MAP = {
+  'OCR Specialist':                'ocr',
+  'Invoice Data Extraction Expert':'extract',
+  'Invoice Validation Auditor':    'validate',
+  'Invoice Storage Manager':       'store',
+};
+
+function setStage(agentRole, state) {
+  const key = STAGE_MAP[agentRole];
+  if (!key) return;
+  const el = document.getElementById(`s-${key}`);
+  if (!el) return;
+  el.classList.remove('active', 'done', 'failed');
+  if (state) el.classList.add(state);
+}
+
+function resetPipeline() {
+  ['ocr','extract','validate','store'].forEach(k => {
+    document.getElementById(`s-${k}`)?.classList.remove('active','done','failed');
+  });
+}
+
+// ── SSE stream ────────────────────────────────────────────────────────────
+
+async function startStream(streamUrl) {
+  if (es) { es.cancel?.(); es = null; }
+
+  const url = `${API}${streamUrl}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  let res;
+  try {
+    res = await fetch(url);
+    if (!res.ok || !res.body) return;
+  } catch {
+    return;
+  }
+
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  es = { cancel: () => reader.cancel() };
+
+  (async () => {
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const raw = line.slice(5).trim();
+          if (!raw) continue;
+          let evt;
+          try { evt = JSON.parse(raw); } catch { continue; }
+          handleEvent(evt);
+          if (evt.type === 'done') return;
+        }
+      }
+    } catch { /* stream closed */ }
+  })();
+}
+
+function handleEvent(evt) {
+  switch (evt.type) {
+    case 'crew_started':
+      resetPipeline();
+      break;
+
+    case 'task_started':
+      setStage(evt.agent_role, 'active');
+      break;
+
+    case 'task_completed':
+      setStage(evt.agent_role, 'done');
+      // After OCR done, load reference image
+      if (evt.agent_role === 'OCR Specialist' && currentStem) {
+        loadRefImage(currentStem);
+      }
+      break;
+
+    case 'task_failed':
+      setStage(evt.agent_role, 'failed');
+      break;
+
+    case 'fields_update':
+      applyFields(evt.fields);
+      break;
+
+    case 'crew_completed':
+      // Fetch full result (with validation) from API
+      if (evt.file_stem) {
+        setTimeout(() => fetchFinalData(evt.file_stem), 500);
+      }
+      break;
+
+    case 'crew_failed':
+      console.error('Crew failed:', evt.error);
+      break;
+  }
+}
+
+async function fetchFinalData(stem) {
+  try {
+    const res  = await fetch(`${API}/api/invoice/${stem}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    applyFields(data);
+    if (data.validation) applyValidation(data.validation);
+  } catch { /* ignore */ }
+}
+
+function loadRefImage(stem) {
+  const body       = document.getElementById('ref-body');
+  const refUrl     = `${API}/reference/${stem}_page1_ref.png`;
+  const img        = new Image();
+  img.style.maxWidth = '100%';
+  img.onload  = () => { body.innerHTML = ''; body.appendChild(img); };
+  img.onerror = () => {};  // stay as is if no ref image
+  img.src = refUrl;
+}
+
+// ── Upload + process ──────────────────────────────────────────────────────
+
+async function processFile(file) {
+  if (!file) return;
+  if (!token) { showAuth(file); return; }
+
+  setStatus('uploading');
+  resetPipeline();
+  buildFields();
+  currentFilename = file.name;
+  currentStem     = '';
+
+  // Show PDF immediately (object URL preview)
+  const objUrl = URL.createObjectURL(file);
+  showPdf(objUrl);
+
+  const form = new FormData();
+  form.append('file', file);
+
+  let jobRes;
+  try {
+    const r = await fetch(`${API}/api/process`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body:    form,
+    });
+    if (r.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      token = '';
+      showAuth(file);
+      return;
+    }
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      alert(err.detail || 'Upload failed');
+      setStatus('idle');
+      return;
+    }
+    jobRes = await r.json();
+  } catch (e) {
+    alert('Network error: ' + e.message);
+    setStatus('idle');
+    return;
+  }
+
+  currentStem = jobRes.stem || file.name.replace(/\.[^.]+$/, '');
+  setStatus('streaming');
+  URL.revokeObjectURL(objUrl);
+  showPdf(`${API}/invoices/${jobRes.filename}`);
+  await startStream(jobRes.stream_url);
+  setStatus('done');
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────
+
+function showPdf(url) {
+  const frame = document.getElementById('pdf-frame');
+  const dz    = document.getElementById('dropzone');
+  frame.src          = url;
+  frame.style.display = 'block';
+  dz.style.display    = 'none';
+}
+
+let _status = 'idle';
+function setStatus(s) {
+  _status = s;
+  const btn = document.getElementById('upload-btn');
+  const labels = {
+    idle:      'Upload Invoice',
+    uploading: 'Uploading…',
+    streaming: 'Processing…',
+    done:      'Upload Invoice',
+  };
+  btn.textContent = labels[s] || 'Upload Invoice';
+  btn.disabled    = (s === 'uploading' || s === 'streaming');
+}
+
+// ── Auth modal ────────────────────────────────────────────────────────────
+
+let _pendingFile = null;
+
+function showAuth(file) {
+  _pendingFile = file || null;
+  document.getElementById('auth-modal').style.display = 'flex';
+  document.getElementById('auth-input').value  = '';
+  document.getElementById('auth-err').style.display = 'none';
+  setTimeout(() => document.getElementById('auth-input').focus(), 50);
+}
+
+async function doLogin() {
+  const raw = document.getElementById('auth-input').value.trim();
+  if (!raw) return;
+  const errEl = document.getElementById('auth-err');
+  errEl.style.display = 'none';
+  try {
+    const r = await fetch(`${API}/auth/login`, {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ token: raw }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.detail || 'Invalid token'; errEl.style.display = 'block'; return; }
+    token = d.access_token;
+    localStorage.setItem(TOKEN_KEY, token);
+    document.getElementById('auth-modal').style.display = 'none';
+    if (_pendingFile) { const f = _pendingFile; _pendingFile = null; processFile(f); }
+  } catch (e) {
+    errEl.textContent = 'Network error'; errEl.style.display = 'block';
+  }
+}
+
+document.getElementById('auth-btn').addEventListener('click', doLogin);
+document.getElementById('auth-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// ── Event wiring ──────────────────────────────────────────────────────────
+
+document.getElementById('upload-btn').addEventListener('click', () => {
+  if (_status === 'uploading' || _status === 'streaming') return;
+  document.getElementById('file-input').click();
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (f) processFile(f);
+  e.target.value = '';
+});
+
+const dropzone = document.getElementById('dropzone');
+dropzone.addEventListener('click', () => {
+  document.getElementById('dz-input').click();
+});
+document.getElementById('dz-input').addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (f) processFile(f);
+  e.target.value = '';
+});
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  const f = e.dataTransfer.files?.[0];
+  if (f) processFile(f);
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function fmt(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+
+buildFields();
+
+// Check if we have a token but it might be expired — test silently
+if (!token) {
+  showAuth(null);
+}
+</script>
+</body>
+</html>

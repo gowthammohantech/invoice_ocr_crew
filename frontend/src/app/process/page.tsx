@@ -98,7 +98,7 @@ export default function ProcessPage() {
         );
       } catch {}
       setUploading(false);
-      await start(stream_url);
+      start(stream_url);   // EventSource — non-blocking, fires onmessage per event
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -118,34 +118,16 @@ export default function ProcessPage() {
     try { sessionStorage.removeItem(PROCESS_SESSION_KEY); } catch {}
   }
 
-  const agents = [
-    { name: "OCR Agent", cardCls: "bg-blue-50 border-blue-200", dotCls: "bg-blue-500", textCls: "text-blue-800", desc: "Extracts raw text" },
-    { name: "Extraction Agent", cardCls: "bg-violet-50 border-violet-200", dotCls: "bg-violet-500", textCls: "text-violet-800", desc: "Structures into JSON" },
-    { name: "Validation Agent", cardCls: "bg-amber-50 border-amber-200", dotCls: "bg-amber-500", textCls: "text-amber-800", desc: "Runs 5 math checks" },
-    { name: "Storage Agent", cardCls: "bg-emerald-50 border-emerald-200", dotCls: "bg-emerald-500", textCls: "text-emerald-800", desc: "Saves to pass/failed" },
-  ];
-
   return (
     <div className="p-8 max-w-2xl">
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Process Invoice</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Upload an invoice file and watch the agents work in real-time
+          Upload an invoice and watch each agent complete in sequence
         </p>
       </div>
 
-      {/* Agent info cards */}
-      <div className="grid grid-cols-2 gap-3 mb-8">
-        {agents.map(({ name, cardCls, dotCls, textCls, desc }) => (
-          <div key={name} className={`border rounded-lg p-3 ${cardCls}`}>
-            <div className={`w-1.5 h-1.5 rounded-full mb-2 ${dotCls}`} />
-            <p className={`text-xs font-medium ${textCls}`}>{name}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Upload section */}
+      {/* Upload card */}
       <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5 shadow-sm">
         <DropZone onFile={setFile} disabled={isRunning} />
 
@@ -162,9 +144,9 @@ export default function ProcessPage() {
             className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-medium"
           >
             {uploading ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading...</>
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading…</>
             ) : isStreaming ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Agents running...</>
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing…</>
             ) : (
               <><Upload className="w-4 h-4 mr-2" />Process Invoice</>
             )}
@@ -182,7 +164,7 @@ export default function ProcessPage() {
         </div>
       </div>
 
-      {/* Execution timeline */}
+      {/* Pipeline */}
       <ExecutionTimeline
         events={events}
         isStreaming={isStreaming}
