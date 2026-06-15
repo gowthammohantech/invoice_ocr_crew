@@ -36,19 +36,36 @@ GOOGLE_VISION_API_KEY = os.environ.get("GOOGLE_VISION_API_KEY", "")
 GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 
 # --- LLM ---
+# Supported values: "ollama", "ollama_cloud", "gemini", "openai"
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").lower()
 
-# Ollama — direct HTTP URL used by llm_processor for trace-logged calls
+# Ollama Local — direct HTTP URL used by llm_processor for trace-logged calls
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/api/chat")
 OLLAMA_MODEL   = os.environ.get("OLLAMA_MODEL", "gemma4:31b-cloud")
+OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
+
+# Ollama Cloud — remote Ollama-compatible endpoint (e.g. Ollama Cloud, self-hosted VPS)
+OLLAMA_CLOUD_API_URL = os.environ.get("OLLAMA_CLOUD_API_URL", "")
+OLLAMA_CLOUD_MODEL   = os.environ.get("OLLAMA_CLOUD_MODEL", "")
+OLLAMA_CLOUD_API_KEY = os.environ.get("OLLAMA_CLOUD_API_KEY", "")
 
 # Separate model for CrewAI agent orchestration — must support tool/function calling.
 # qwen2.5vl and other vision models often lack tool support; use a chat model here.
-CREW_AGENT_MODEL = os.environ.get("CREW_AGENT_MODEL", OLLAMA_MODEL)
+CREW_AGENT_MODEL       = os.environ.get("CREW_AGENT_MODEL", OLLAMA_MODEL)
+CREW_AGENT_MODEL_CLOUD = os.environ.get("CREW_AGENT_MODEL_CLOUD", OLLAMA_CLOUD_MODEL)
 
-# LiteLLM needs the Ollama base (no /api/chat path)
+# Derive the local Ollama base URL (strip the /api/chat path suffix)
 _ollama_base = OLLAMA_API_URL.replace("/api/chat", "").rstrip("/")
-os.environ.setdefault("OLLAMA_API_BASE", _ollama_base)
+os.environ.setdefault("OLLAMA_API_BASE", _ollama_base)  # LiteLLM
+os.environ.setdefault("OLLAMA_HOST", _ollama_base)       # CrewAI native openai_compatible provider
+
+# When using Ollama Cloud, wire the cloud endpoint as an OpenAI-compatible base so that
+# LiteLLM (used by CrewAI) can reach it via the "openai/" model prefix.
+if LLM_PROVIDER == "ollama_cloud" and OLLAMA_CLOUD_API_URL:
+    _cloud_base = OLLAMA_CLOUD_API_URL.replace("/api/chat", "").rstrip("/") + "/v1"
+    os.environ["OPENAI_API_BASE"] = _cloud_base
+    if OLLAMA_CLOUD_API_KEY:
+        os.environ["OPENAI_API_KEY"] = OLLAMA_CLOUD_API_KEY
 
 # Gemini
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -69,9 +86,12 @@ def get_litellm_model_string() -> str:
     """Returns a LiteLLM-compatible model string for crewai Agent(llm=...)."""
     if LLM_PROVIDER == "ollama":
         return f"ollama/{OLLAMA_MODEL}"
+    elif LLM_PROVIDER == "ollama_cloud":
+        # Remote Ollama is exposed as an OpenAI-compatible endpoint; OPENAI_API_BASE is set above.
+        return f"openai/{OLLAMA_CLOUD_MODEL}"
     elif LLM_PROVIDER == "gemini":
         return f"gemini/{GEMINI_MODEL}"
     elif LLM_PROVIDER == "openai":
         return f"openai/{OPENAI_MODEL}"
     else:
-        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'ollama', 'gemini', or 'openai'.")
+        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'ollama', 'ollama_cloud', 'gemini', or 'openai'.")

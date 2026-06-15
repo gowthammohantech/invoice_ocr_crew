@@ -99,11 +99,23 @@ def clean_json_response(response_text: str) -> str:
     return text
 
 
-def query_ollama(prompt: str, ocr_text: str, trace: dict, images: Optional[list[str]] = None) -> str:
+def query_ollama(
+    prompt: str,
+    ocr_text: str,
+    trace: dict,
+    images: Optional[list[str]] = None,
+    api_url: Optional[str] = None,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> str:
     """
-    Sends request to local Ollama instance.
-    Passes base64 images when provided and the model supports vision.
+    Sends request to an Ollama instance (local or remote cloud).
+    api_url/model/api_key default to the local Ollama config values when not provided.
     """
+    _url     = api_url  or config.OLLAMA_API_URL
+    _model   = model    or config.OLLAMA_MODEL
+    _api_key = api_key  if api_key is not None else config.OLLAMA_API_KEY
+
     full_prompt = f"{prompt}\n\nInvoice OCR Text:\n{ocr_text}"
 
     message: dict = {"role": "user", "content": full_prompt}
@@ -111,7 +123,7 @@ def query_ollama(prompt: str, ocr_text: str, trace: dict, images: Optional[list[
         message["images"] = images
 
     payload = {
-        "model": config.OLLAMA_MODEL,
+        "model": _model,
         "messages": [message],
         "stream": False,
         "format": "json",  # Force json mode if supported by model/Ollama version
@@ -120,20 +132,24 @@ def query_ollama(prompt: str, ocr_text: str, trace: dict, images: Optional[list[
         }
     }
 
+    headers: dict = {"Content-Type": "application/json"}
+    if _api_key:
+        headers["Authorization"] = f"Bearer {_api_key}"
+
     trace["request"] = {
-        "url": config.OLLAMA_API_URL,
-        "headers": {"Content-Type": "application/json"},
+        "url": _url,
+        "headers": {**headers, "Authorization": "Bearer ***"} if _api_key else headers,
         "payload": {**payload, "messages": [{**message, "images": f"[{len(images)} image(s) omitted]"} if images else message]},
     }
-    
+
     try:
-        response = requests.post(config.OLLAMA_API_URL, json=payload, timeout=60)
-        
+        response = requests.post(_url, json=payload, headers=headers, timeout=60)
+
         trace["response"] = {
             "status_code": response.status_code,
             "raw_body": response.text
         }
-        
+
         response.raise_for_status()
         result = response.json()
         # Ollama chat API returns {"message": {"content": "..."}}
@@ -151,7 +167,7 @@ def query_ollama(prompt: str, ocr_text: str, trace: dict, images: Optional[list[
                 "raw_body": response.text
             }
         raise ConnectionError(
-            f"Ollama API request failed. Ensure Ollama is running locally at '{config.OLLAMA_API_URL}'.\nError: {e}"
+            f"Ollama API request failed at '{_url}'.\nError: {e}"
         )
 
 
@@ -289,6 +305,12 @@ def parse_invoice_text(
 
     if selected_provider == "ollama":
         model_name = config.OLLAMA_MODEL
+    elif selected_provider == "ollama_cloud":
+        if not config.OLLAMA_CLOUD_API_URL:
+            raise ValueError("OLLAMA_CLOUD_API_URL is not set. Configure it to use the 'ollama_cloud' provider.")
+        if not config.OLLAMA_CLOUD_MODEL:
+            raise ValueError("OLLAMA_CLOUD_MODEL is not set. Configure it to use the 'ollama_cloud' provider.")
+        model_name = config.OLLAMA_CLOUD_MODEL
     elif selected_provider == "gemini":
         model_name = config.GEMINI_MODEL
     elif selected_provider == "openai":
@@ -316,6 +338,13 @@ def parse_invoice_text(
     try:
         if selected_provider == "ollama":
             raw_response = query_ollama(system_prompt, ocr_text, trace, images)
+        elif selected_provider == "ollama_cloud":
+            raw_response = query_ollama(
+                system_prompt, ocr_text, trace, images,
+                api_url=config.OLLAMA_CLOUD_API_URL,
+                model=config.OLLAMA_CLOUD_MODEL,
+                api_key=config.OLLAMA_CLOUD_API_KEY,
+            )
         elif selected_provider == "gemini":
             raw_response = query_gemini(system_prompt, ocr_text, trace, images)
         elif selected_provider == "openai":

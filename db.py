@@ -3,7 +3,8 @@ import sqlite3
 from datetime import datetime, timezone
 import config
 
-DB_PATH = config.BASE_DIR / "invoices.db"
+DB_PATH = config.BASE_DIR / "data" / "invoices.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _conn() -> sqlite3.Connection:

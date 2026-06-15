@@ -10,6 +10,9 @@ services:
     environment:
       # When Ollama runs on the host, point at the Docker host gateway
       OLLAMA_API_URL: ${OLLAMA_API_URL:-http://host.docker.internal:11434/api/chat}
+      # PaddlePaddle crashes under QEMU emulation (Apple Silicon); use tesseract instead.
+      # Switch to google_vision or doctr for better accuracy if needed.
+      OCR_ENGINE: ${DOCKER_OCR_ENGINE:-tesseract}
     volumes:
       - invoice_data:/app/invoice_data
       - invoice_raw:/app/invoice_raw_data
@@ -17,6 +20,7 @@ services:
       - traces:/app/invoice_traces
       - logs:/app/logs
       - reference:/app/reference
+      - db_data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -46,3 +50,4 @@ volumes:
   traces:
   logs:
   reference:
+  db_data:

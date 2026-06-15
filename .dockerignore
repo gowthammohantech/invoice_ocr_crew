@@ -4,6 +4,7 @@ __pycache__
 *.pyc
 *.pyo
 .DS_Store
+.venv/
 frontend/
 invoices/
 invoice_raw_data/
@@ -11,3 +12,5 @@ invoice_data/
 invoice_traces/
 logs/
 reference/
+data/
+invoices.db

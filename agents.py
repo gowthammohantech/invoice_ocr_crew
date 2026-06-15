@@ -6,13 +6,17 @@ import config
 
 def _get_crew_llm() -> str:
     provider = config.LLM_PROVIDER
-    model = config.CREW_AGENT_MODEL
     if provider == "ollama":
-        return f"ollama/{model}"
-    elif provider == "gemini":
-        return f"gemini/{model}"
-    elif provider == "openai":
+        return f"ollama/{config.CREW_AGENT_MODEL}"
+    elif provider == "ollama_cloud":
+        # Remote Ollama is exposed as an OpenAI-compatible endpoint;
+        # OPENAI_API_BASE is set in config.py when this provider is active.
+        model = config.CREW_AGENT_MODEL_CLOUD or config.OLLAMA_CLOUD_MODEL
         return f"openai/{model}"
+    elif provider == "gemini":
+        return f"gemini/{config.GEMINI_MODEL}"
+    elif provider == "openai":
+        return f"openai/{config.OPENAI_MODEL}"
     raise ValueError(f"Unknown LLM_PROVIDER: {provider!r}")
 
 _LLM = _get_crew_llm()
