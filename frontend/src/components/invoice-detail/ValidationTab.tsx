@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, XCircle, AlertTriangle, AlertCircle } from "lucide-react";
+import { CheckCircle, AlertTriangle, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInvoiceDetail } from "@/hooks/useInvoices";
