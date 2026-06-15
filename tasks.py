@@ -1,5 +1,4 @@
 from crewai import Agent, Task
-from schemas import InvoiceOutput
 
 
 def make_ocr_task(agent: Agent) -> Task:
@@ -73,5 +72,4 @@ def make_storage_task(agent: Agent, validation_task: Task) -> Task:
         ),
         agent=agent,
         context=[validation_task],
-        output_json=InvoiceOutput,
     )
