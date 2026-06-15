@@ -1,0 +1,2 @@
+# Task configurations are defined programmatically in tasks.py.
+# This file exists to suppress CrewAI @CrewBase lookup warnings.

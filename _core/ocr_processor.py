@@ -1,3 +1,5 @@
+import io
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +39,41 @@ if config.OCR_ENGINE == "paddleocr":
         print("Error: 'paddleocr' is required for OCR_ENGINE=paddleocr.")
         print("Install it using: pip install paddleocr paddlepaddle")
         sys.exit(1)
+
+elif config.OCR_ENGINE == "google_vision":
+    try:
+        # pyrefly: ignore [missing-import]
+        from google.cloud import vision as _gv
+        # pyrefly: ignore [missing-import]
+        from google.api_core.client_options import ClientOptions
+        if config.GOOGLE_VISION_API_KEY:
+            _vision_client = _gv.ImageAnnotatorClient(
+                client_options=ClientOptions(api_key=config.GOOGLE_VISION_API_KEY)
+            )
+        else:
+            # Fall back to service-account JSON or Application Default Credentials
+            if config.GOOGLE_APPLICATION_CREDENTIALS:
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = config.GOOGLE_APPLICATION_CREDENTIALS
+            _vision_client = _gv.ImageAnnotatorClient()
+    except ImportError:
+        print("Error: 'google-cloud-vision' is required for OCR_ENGINE=google_vision.")
+        print("Install it using: pip install google-cloud-vision")
+        sys.exit(1)
+
+elif config.OCR_ENGINE == "doctr":
+    try:
+        # pyrefly: ignore [missing-import]
+        import numpy as np
+        # pyrefly: ignore [missing-import]
+        from doctr.io import DocumentFile
+        # pyrefly: ignore [missing-import]
+        from doctr.models import ocr_predictor
+        _doctr = ocr_predictor(pretrained=True)
+    except ImportError:
+        print("Error: 'python-doctr' is required for OCR_ENGINE=doctr.")
+        print("Install it using: pip install python-doctr[torch]")
+        sys.exit(1)
+
 else:
     try:
         # pyrefly: ignore [missing-import]
@@ -77,6 +114,57 @@ def _paddle_from_image(img: Image.Image) -> tuple[str, list, Image.Image]:
     return "\n".join(lines).strip(), boxes, img
 
 
+def _doctr_from_image(img: Image.Image) -> tuple[str, list, Image.Image]:
+    rgb = img.convert("RGB")
+    arr = np.array(rgb)
+    doc = DocumentFile.from_images([arr])
+    result = _doctr(doc)
+
+    w, h = rgb.size
+    lines, boxes = [], []
+    for page in result.pages:
+        for block in page.blocks:
+            for line in block.lines:
+                lines.append(" ".join(word.value for word in line.words))
+                for word in line.words:
+                    (x1, y1), (x2, y2) = word.geometry
+                    boxes.append([
+                        (x1 * w, y1 * h),
+                        (x2 * w, y1 * h),
+                        (x2 * w, y2 * h),
+                        (x1 * w, y2 * h),
+                    ])
+
+    return "\n".join(lines).strip(), boxes, rgb
+
+
+def _google_vision_from_image(img: Image.Image) -> tuple[str, list, Image.Image]:
+    """Send a PIL image to Google Cloud Vision and return (text, boxes, img)."""
+    rgb = img.convert("RGB")
+    buf = io.BytesIO()
+    rgb.save(buf, format="PNG")
+    content = buf.getvalue()
+
+    gv_image = _gv.Image(content=content)
+    response = _vision_client.document_text_detection(image=gv_image)
+
+    if response.error.message:
+        raise RuntimeError(f"Google Vision API error: {response.error.message}")
+
+    full_text = response.full_text_annotation.text.strip() if response.full_text_annotation else ""
+
+    # Extract bounding boxes from word-level annotations for the reference overlay.
+    boxes = []
+    for page in (response.full_text_annotation.pages or []):
+        for block in (page.blocks or []):
+            for para in (block.paragraphs or []):
+                for word in (para.words or []):
+                    verts = word.bounding_box.vertices
+                    boxes.append([(v.x, v.y) for v in verts])
+
+    return full_text, boxes, rgb
+
+
 def _draw_ocr_boxes(img: Image.Image, boxes: list) -> Image.Image:
     annotated = img.convert("RGBA")
     overlay = Image.new("RGBA", annotated.size, (0, 0, 0, 0))
@@ -99,6 +187,10 @@ def _save_reference_image(source_path: Path, page_num: int, annotated: Image.Ima
 def _ocr_image_obj(img: Image.Image) -> tuple[str, list, Image.Image]:
     if config.OCR_ENGINE == "paddleocr":
         return _paddle_from_image(img)
+    if config.OCR_ENGINE == "google_vision":
+        return _google_vision_from_image(img)
+    if config.OCR_ENGINE == "doctr":
+        return _doctr_from_image(img)
     return _tesseract_from_image(img), [], img
 
 
@@ -114,7 +206,7 @@ def ocr_pdf(pdf_path: Path) -> str:
             f"Is 'poppler' installed? (brew install poppler)\nError: {e}"
         )
 
-    engine_label = config.OCR_ENGINE.capitalize()
+    engine_label = config.OCR_ENGINE.replace("_", " ").title()
     print(f"Running {engine_label} OCR on {len(pages)} PDF pages...")
     blocks = []
     for i, page in enumerate(pages):
@@ -137,7 +229,7 @@ def ocr_image(image_path: Path) -> str:
     try:
         with Image.open(image_path) as img:
             img_copy = img.copy()
-            engine_label = config.OCR_ENGINE.capitalize()
+            engine_label = config.OCR_ENGINE.replace("_", " ").title()
             print(f"Running {engine_label} OCR on '{image_path.name}'...")
             text, boxes, canvas = _ocr_image_obj(img_copy)
             if boxes:

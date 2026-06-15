@@ -1,8 +1,6 @@
 import json
 import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
-
 import config
 
 DB_PATH = config.BASE_DIR / "invoices.db"
@@ -26,6 +24,10 @@ def init_db() -> None:
             )
         """)
         c.commit()
+
+
+# Ensure the schema exists as soon as this module is imported
+init_db()
 
 
 def migrate_from_files() -> int:

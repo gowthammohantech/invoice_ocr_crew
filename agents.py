@@ -4,7 +4,18 @@ import pathlib
 from crewai import Agent
 import config
 
-_LLM = config.get_litellm_model_string()
+def _get_crew_llm() -> str:
+    provider = config.LLM_PROVIDER
+    model = config.CREW_AGENT_MODEL
+    if provider == "ollama":
+        return f"ollama/{model}"
+    elif provider == "gemini":
+        return f"gemini/{model}"
+    elif provider == "openai":
+        return f"openai/{model}"
+    raise ValueError(f"Unknown LLM_PROVIDER: {provider!r}")
+
+_LLM = _get_crew_llm()
 _SKILLS_PATH = pathlib.Path(__file__).parent / "skills.md"
 
 

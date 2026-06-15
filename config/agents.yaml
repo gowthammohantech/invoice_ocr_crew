@@ -1,0 +1,2 @@
+# Agent configurations are defined programmatically in agents.py.
+# This file exists to suppress CrewAI @CrewBase lookup warnings.

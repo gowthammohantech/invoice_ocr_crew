@@ -1,3 +1,5 @@
+import base64
+import io
 import json
 import requests
 from typing import Dict, Any, Optional
@@ -6,6 +8,33 @@ from pathlib import Path
 import config
 from trace_logger import new_trace, finish_trace
 from time import time_ns
+
+try:
+    from PIL import Image as _PILImage
+    from pdf2image import convert_from_path as _convert_from_path
+    _VISION_DEPS = True
+except ImportError:
+    _VISION_DEPS = False
+
+
+def _file_to_base64_images(file_path: Path) -> list[str]:
+    """Convert an invoice file to a list of base64 PNG strings (one per page/image)."""
+    if not _VISION_DEPS:
+        raise RuntimeError("Pillow and pdf2image are required for vision support.")
+    suffix = file_path.suffix.lower()
+    results: list[str] = []
+    if suffix == ".pdf":
+        pages = _convert_from_path(str(file_path), dpi=150, thread_count=1)
+        for page in pages:
+            buf = io.BytesIO()
+            page.save(buf, format="PNG")
+            results.append(base64.b64encode(buf.getvalue()).decode())
+    else:
+        with _PILImage.open(file_path) as img:
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="PNG")
+            results.append(base64.b64encode(buf.getvalue()).decode())
+    return results
 
 
 def get_system_prompt() -> str:
@@ -70,31 +99,31 @@ def clean_json_response(response_text: str) -> str:
     return text
 
 
-def query_ollama(prompt: str, ocr_text: str, trace: dict) -> str:
+def query_ollama(prompt: str, ocr_text: str, trace: dict, images: Optional[list[str]] = None) -> str:
     """
     Sends request to local Ollama instance.
+    Passes base64 images when provided and the model supports vision.
     """
     full_prompt = f"{prompt}\n\nInvoice OCR Text:\n{ocr_text}"
-    
+
+    message: dict = {"role": "user", "content": full_prompt}
+    if images:
+        message["images"] = images
+
     payload = {
         "model": config.OLLAMA_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": full_prompt
-            }
-        ],
+        "messages": [message],
         "stream": False,
         "format": "json",  # Force json mode if supported by model/Ollama version
         "options": {
             "temperature": 0.0
         }
     }
-    
+
     trace["request"] = {
         "url": config.OLLAMA_API_URL,
         "headers": {"Content-Type": "application/json"},
-        "payload": payload
+        "payload": {**payload, "messages": [{**message, "images": f"[{len(images)} image(s) omitted]"} if images else message]},
     }
     
     try:
@@ -126,37 +155,39 @@ def query_ollama(prompt: str, ocr_text: str, trace: dict) -> str:
         )
 
 
-def query_gemini(prompt: str, ocr_text: str, trace: dict) -> str:
+def query_gemini(prompt: str, ocr_text: str, trace: dict, images: Optional[list[str]] = None) -> str:
     """
     Sends request to Gemini Developer API.
+    Passes base64 images as inline_data parts when provided.
     """
     if not config.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not set in environment or config.py.")
-        
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}"
     full_prompt = f"{prompt}\n\nInvoice OCR Text:\n{ocr_text}"
-    
+
+    parts: list[dict] = [{"text": full_prompt}]
+    if images:
+        for b64 in images:
+            parts.append({"inline_data": {"mime_type": "image/png", "data": b64}})
+
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": full_prompt
-                    }
-                ]
-            }
-        ],
+        "contents": [{"parts": parts}],
         "generationConfig": {
             "responseMimeType": "application/json",
             "temperature": 0.0
         }
     }
-    
+
+    trace_parts = [{"text": full_prompt}]
+    if images:
+        trace_parts.append({"inline_data": f"[{len(images)} image(s) omitted]"})
+
     masked_url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent?key=***"
     trace["request"] = {
         "url": masked_url,
         "headers": {"Content-Type": "application/json"},
-        "payload": payload
+        "payload": {"contents": [{"parts": trace_parts}], "generationConfig": payload["generationConfig"]},
     }
     
     try:
@@ -179,41 +210,44 @@ def query_gemini(prompt: str, ocr_text: str, trace: dict) -> str:
         raise ValueError(f"Failed to parse response structure from Gemini API: {e}")
 
 
-def query_openai(prompt: str, ocr_text: str, trace: dict) -> str:
+def query_openai(prompt: str, ocr_text: str, trace: dict, images: Optional[list[str]] = None) -> str:
     """
     Sends request to OpenAI Chat Completions API.
+    Passes base64 images as image_url content blocks when provided (requires a vision-capable model).
     """
     if not config.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not set in environment or config.py.")
-        
+
     full_prompt = f"{prompt}\n\nInvoice OCR Text:\n{ocr_text}"
-    
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {config.OPENAI_API_KEY}"
     }
-    
+
+    if images:
+        content: Any = [{"type": "text", "text": full_prompt}]
+        for b64 in images:
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}})
+        trace_content: Any = [{"type": "text", "text": full_prompt}, {"type": "image_url", "image_url": f"[{len(images)} image(s) omitted]"}]
+    else:
+        content = full_prompt
+        trace_content = full_prompt
+
     payload = {
         "model": config.OPENAI_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": full_prompt
-            }
-        ],
-        "response_format": {
-            "type": "json_object"
-        },
+        "messages": [{"role": "user", "content": content}],
+        "response_format": {"type": "json_object"},
         "temperature": 0.0
     }
-    
+
     trace["request"] = {
         "url": config.OPENAI_API_URL,
         "headers": {
             "Content-Type": "application/json",
             "Authorization": "Bearer ***"
         },
-        "payload": payload
+        "payload": {**payload, "messages": [{"role": "user", "content": trace_content}]},
     }
     
     try:
@@ -236,11 +270,16 @@ def query_openai(prompt: str, ocr_text: str, trace: dict) -> str:
         raise ValueError(f"Failed to parse response structure from OpenAI API: {e}")
 
 
-def parse_invoice_text(ocr_text: str, provider: Optional[str] = None, filename: Optional[str] = None) -> Dict[str, Any]:
+def parse_invoice_text(
+    ocr_text: str,
+    provider: Optional[str] = None,
+    filename: Optional[str] = None,
+    image_path: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Calls the selected LLM provider to extract invoice data as structured JSON.
-    Emits a structured log line + appends to logs/llm_traces.jsonl via finish_trace.
-    Also saves a per-invoice detail trace to invoice_traces/.
+    When image_path is provided and LLM_SEND_IMAGE is true, the original invoice
+    image(s) are sent alongside the OCR text for vision-capable models.
     """
     if not ocr_text.strip():
         raise ValueError("OCR text is empty. Cannot parse invoice.")
@@ -261,17 +300,26 @@ def parse_invoice_text(ocr_text: str, provider: Optional[str] = None, filename: 
     trace["system_prompt"] = system_prompt
     trace["ocr_text"] = ocr_text
 
+    images: Optional[list[str]] = None
+    if config.LLM_SEND_IMAGE and image_path:
+        try:
+            images = _file_to_base64_images(Path(image_path))
+            print(f"Vision: sending {len(images)} image(s) alongside OCR text.")
+            trace["vision_images_sent"] = len(images)
+        except Exception as e:
+            print(f"Warning: could not load image for vision — falling back to text only. ({e})")
+
     print(f"Calling LLM provider '{selected_provider}' for reasoning...")
     start = time_ns()
     caught_error: Optional[Exception] = None
 
     try:
         if selected_provider == "ollama":
-            raw_response = query_ollama(system_prompt, ocr_text, trace)
+            raw_response = query_ollama(system_prompt, ocr_text, trace, images)
         elif selected_provider == "gemini":
-            raw_response = query_gemini(system_prompt, ocr_text, trace)
+            raw_response = query_gemini(system_prompt, ocr_text, trace, images)
         elif selected_provider == "openai":
-            raw_response = query_openai(system_prompt, ocr_text, trace)
+            raw_response = query_openai(system_prompt, ocr_text, trace, images)
         else:
             raise ValueError(f"Unknown LLM provider: {selected_provider}")
 

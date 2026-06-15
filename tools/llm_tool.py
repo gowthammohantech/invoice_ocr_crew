@@ -19,6 +19,14 @@ import llm_processor  # _core/llm_processor.py
 class LLMExtractionInput(BaseModel):
     ocr_text: str = Field(description="Raw OCR text extracted from the invoice")
     filename: str = Field(default="", description="Invoice filename for trace logging")
+    image_path: str = Field(
+        default="",
+        description=(
+            "Absolute path to the original invoice file (PDF or image). "
+            "When provided, the image is sent to the LLM alongside the OCR text "
+            "for vision-capable models, improving extraction accuracy."
+        ),
+    )
 
 
 class LLMExtractionTool(BaseTool):
@@ -26,15 +34,18 @@ class LLMExtractionTool(BaseTool):
     description: str = (
         "Sends raw OCR text to the configured LLM provider (Ollama/Gemini/OpenAI) "
         "and returns a structured invoice JSON string. "
+        "Pass image_path (the original invoice file path) so the LLM can also see the image "
+        "if it supports vision. "
         "Trace logs are saved automatically to invoice_traces/."
     )
     args_schema: Type[BaseModel] = LLMExtractionInput
 
-    def _run(self, ocr_text: str, filename: str = "") -> str:
+    def _run(self, ocr_text: str, filename: str = "", image_path: str = "") -> str:
         try:
             parsed = llm_processor.parse_invoice_text(
                 ocr_text,
                 filename=filename or None,
+                image_path=image_path or None,
             )
             return json.dumps(parsed, ensure_ascii=False)
         except Exception as e:

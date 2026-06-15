@@ -25,8 +25,15 @@ SUPPORTED_EXTENSIONS = {
 }
 
 # --- OCR ---
+# Supported values: "paddleocr", "tesseract", "google_vision", "doctr"
 OCR_ENGINE = os.environ.get("OCR_ENGINE", "paddleocr").lower()
 OCR_LANG   = os.environ.get("OCR_LANG", "eng")
+
+# Google Vision API auth — pick ONE of the two options below:
+#   1. API key  (simplest — create one in GCP Console → APIs & Services → Credentials)
+GOOGLE_VISION_API_KEY = os.environ.get("GOOGLE_VISION_API_KEY", "")
+#   2. Service-account JSON key file path (leave blank to use Application Default Credentials)
+GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 
 # --- LLM ---
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").lower()
@@ -34,6 +41,10 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").lower()
 # Ollama — direct HTTP URL used by llm_processor for trace-logged calls
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/api/chat")
 OLLAMA_MODEL   = os.environ.get("OLLAMA_MODEL", "gemma4:31b-cloud")
+
+# Separate model for CrewAI agent orchestration — must support tool/function calling.
+# qwen2.5vl and other vision models often lack tool support; use a chat model here.
+CREW_AGENT_MODEL = os.environ.get("CREW_AGENT_MODEL", OLLAMA_MODEL)
 
 # LiteLLM needs the Ollama base (no /api/chat path)
 _ollama_base = OLLAMA_API_URL.replace("/api/chat", "").rstrip("/")
@@ -47,6 +58,11 @@ GEMINI_MODEL   = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL   = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_URL = os.environ.get("OPENAI_API_URL", "https://api.openai.com/v1/chat/completions")
+
+# --- Vision ---
+# When true, the original invoice image is sent alongside OCR text if the LLM supports it.
+# Set LLM_SEND_IMAGE=false to disable (e.g. for text-only models or to reduce token usage).
+LLM_SEND_IMAGE = os.environ.get("LLM_SEND_IMAGE", "true").lower() == "true"
 
 
 def get_litellm_model_string() -> str:

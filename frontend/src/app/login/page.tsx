@@ -62,7 +62,7 @@ export default function LoginPage() {
             Agent Sandbox
           </p>
           <p className="text-sm text-slate-500 mt-1">
-            Invoice OCR Crew — Powered by Elixir Global
+            Powered by Elixir Global
           </p>
         </div>
 
