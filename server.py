@@ -530,4 +530,4 @@ app.mount("/reference", StaticFiles(directory=str(config.REFERENCE_DIR)), name="
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("server:app", host="0.0.0.0", port=8080, reload=False)

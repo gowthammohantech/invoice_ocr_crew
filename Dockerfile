@@ -24,4 +24,6 @@ RUN mkdir -p invoices invoice_raw_data invoice_data/pass invoice_data/failed \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+# CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Dockerfile example for FastAPI
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
