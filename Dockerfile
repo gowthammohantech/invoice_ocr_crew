@@ -22,7 +22,7 @@ COPY . .
 RUN mkdir -p invoices invoice_raw_data invoice_data/pass invoice_data/failed \
               invoice_traces logs reference data
 
-EXPOSE 8000
+EXPOSE 8080
 
 # CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
 # Dockerfile example for FastAPI
