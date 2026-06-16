@@ -114,7 +114,7 @@ def make_storage_agent() -> Agent:
             "You are a meticulous data engineer maintaining the invoice archive. "
             "You route every processed invoice to the right directory based on validation results "
             "and confirm the save with the output file path.",
-            "Invoice Storage Manager",
+            "Elixir Books Publisher",
         ),
         tools=[StorageTool()],
         llm=_LLM,

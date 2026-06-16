@@ -235,7 +235,8 @@ class _SSEEventBridge:
                 "file_stem": stem,
                 "ts": datetime.now(timezone.utc).isoformat(),
             })
-            bridge._emit({"type": "done"})
+            # Do NOT emit "done" here — _run_crew's finally block emits it after
+            # db.migrate_from_files() so the frontend fetches AFTER the DB is populated.
 
         @crewai_event_bus.on(CrewKickoffFailedEvent)
         def _crew_failed(source: Any, event: CrewKickoffFailedEvent) -> None:
@@ -330,13 +331,20 @@ def _run_crew(job_id: str, file_path: Path) -> None:
     _thread_local.queue = _streams.get(job_id)
 
     _jobs[job_id]["status"] = "running"
+    _crew_result: str | None = None
     try:
         from crew import InvoiceOCRCrew
         result = InvoiceOCRCrew().crew().kickoff(inputs={
             "file_path": str(file_path.resolve()),
             "file_stem": file_path.stem,
         })
-        _jobs[job_id].update({"status": "done", "result": str(result)})
+        # Crew returns the validated JSON from the validation task.
+        # Call StorageTool directly — never delegate file I/O to an LLM agent.
+        validated_json = result.raw if hasattr(result, "raw") else str(result)
+        from tools.storage_tool import StorageTool as _StorageTool
+        storage_result = _StorageTool()._run(invoice_json=validated_json, stem=file_path.stem)
+        print(f"[server] Storage: {storage_result}", flush=True)
+        _crew_result = storage_result
     except Exception as e:
         _jobs[job_id].update({"status": "failed", "error": str(e)})
         q = _streams.get(job_id)
@@ -345,6 +353,16 @@ def _run_crew(job_id: str, file_path: Path) -> None:
             loop.call_soon_threadsafe(q.put_nowait, {"type": "crew_failed", "error": str(e), "ts": datetime.now(timezone.utc).isoformat()})
             loop.call_soon_threadsafe(q.put_nowait, {"type": "done"})
     finally:
+        # Import JSON files the storage tool wrote to disk — primary safety net when the
+        # in-process DB save fails. Must complete BEFORE emitting "done" so the frontend
+        # fetches find the data already in SQLite.
+        db.migrate_from_files()
+        if _crew_result is not None:
+            _jobs[job_id].update({"status": "done", "result": _crew_result})
+            q = _streams.get(job_id)
+            loop = _main_loop
+            if q and loop:
+                loop.call_soon_threadsafe(q.put_nowait, {"type": "done"})
         _thread_local.queue = None
         _thread_local.job_id = None
 

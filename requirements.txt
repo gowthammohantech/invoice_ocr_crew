@@ -24,3 +24,4 @@ requests>=2.31
 # Auth + SSE (used by server.py)
 python-jose[cryptography]>=3.3.0
 sse-starlette>=1.8.2
+litellm
