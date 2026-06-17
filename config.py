@@ -19,6 +19,13 @@ TRACES_DIR    = BASE_DIR / "invoice_traces"
 LOGS_DIR      = BASE_DIR / "logs"
 REFERENCE_DIR = BASE_DIR / "reference"
 
+# --- Bank Statement Directories ---
+BANK_STATEMENTS_DIR  = BASE_DIR / "bank_statements"
+BANK_RAW_DATA_DIR    = BASE_DIR / "bank_raw_data"
+BANK_DATA_DIR        = BASE_DIR / "bank_data"
+BANK_DATA_PASS_DIR   = BANK_DATA_DIR / "pass"
+BANK_DATA_FAIL_DIR   = BANK_DATA_DIR / "failed"
+
 SUPPORTED_EXTENSIONS = {
     ".pdf", ".heic", ".heif",
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp",

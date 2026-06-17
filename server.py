@@ -282,12 +282,16 @@ async def _startup() -> None:
     # Ensure dirs exist
     config.INVOICES_DIR.mkdir(parents=True, exist_ok=True)
     config.REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
+    config.BANK_STATEMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Init SQLite and import any existing JSON files
     db.init_db()
     imported = db.migrate_from_files()
     if imported:
         print(f"[db] Migrated {imported} invoice(s) from JSON files into SQLite")
+    bank_imported = db.migrate_bank_from_files()
+    if bank_imported:
+        print(f"[db] Migrated {bank_imported} bank statement(s) from JSON files into SQLite")
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +329,42 @@ async def login(body: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Processing endpoints (JWT required)
 # ---------------------------------------------------------------------------
+
+def _run_bank_crew(job_id: str, file_path: Path) -> None:
+    _thread_local.job_id = job_id
+    _thread_local.queue = _streams.get(job_id)
+
+    _jobs[job_id]["status"] = "running"
+    _crew_result: str | None = None
+    try:
+        from bank_crew import BankReconciliationCrew
+        result = BankReconciliationCrew().crew().kickoff(inputs={
+            "file_path": str(file_path.resolve()),
+            "file_stem": file_path.stem,
+        })
+        validated_json = result.raw if hasattr(result, "raw") else str(result)
+        from bank_tools.bank_storage_tool import BankStorageTool as _BankStorageTool
+        storage_result = _BankStorageTool()._run(statement_json=validated_json, stem=file_path.stem)
+        print(f"[server] Bank storage: {storage_result}", flush=True)
+        _crew_result = storage_result
+    except Exception as e:
+        _jobs[job_id].update({"status": "failed", "error": str(e)})
+        q = _streams.get(job_id)
+        loop = _main_loop
+        if q and loop:
+            loop.call_soon_threadsafe(q.put_nowait, {"type": "crew_failed", "error": str(e), "ts": datetime.now(timezone.utc).isoformat()})
+            loop.call_soon_threadsafe(q.put_nowait, {"type": "done"})
+    finally:
+        db.migrate_bank_from_files()
+        if _crew_result is not None:
+            _jobs[job_id].update({"status": "done", "result": _crew_result})
+            q = _streams.get(job_id)
+            loop = _main_loop
+            if q and loop:
+                loop.call_soon_threadsafe(q.put_nowait, {"type": "done"})
+        _thread_local.queue = None
+        _thread_local.job_id = None
+
 
 def _run_crew(job_id: str, file_path: Path) -> None:
     _thread_local.job_id = job_id
@@ -424,7 +464,8 @@ async def stream_job(
     if job.get("status") == "pending":
         file_path = Path(job["file_path"])
         loop = asyncio.get_event_loop()
-        loop.run_in_executor(_executor, _run_crew, job_id, file_path)
+        crew_fn = _run_bank_crew if job.get("type") == "bank" else _run_crew
+        loop.run_in_executor(_executor, crew_fn, job_id, file_path)
 
     async def _event_generator():
         _iters = 0
@@ -518,11 +559,89 @@ async def health() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Static file mounts (after all routes)
+# Bank reconciliation endpoints
 # ---------------------------------------------------------------------------
+
+@app.post("/api/bank/process", summary="Upload a bank statement for OCR + extraction")
+async def process_bank_statement(
+    file: UploadFile = File(...),
+    _user: str = Depends(get_current_user),
+) -> dict:
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in config.SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{suffix}'. Allowed: {', '.join(sorted(config.SUPPORTED_EXTENSIONS))}",
+        )
+
+    config.BANK_STATEMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    dest = config.BANK_STATEMENTS_DIR / file.filename
+    dest.write_bytes(await file.read())
+
+    job_id = uuid.uuid4().hex
+    _jobs[job_id] = {
+        "status": "pending",
+        "type": "bank",
+        "stem": dest.stem,
+        "filename": file.filename,
+        "file_path": str(dest),
+        "result": None,
+        "error": None,
+    }
+    _streams[job_id] = asyncio.Queue()
+
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "filename": file.filename,
+        "stem": dest.stem,
+        "stream_url": f"/api/stream/{job_id}",
+    }
+
+
+@app.get("/api/bank/statements", summary="List all processed bank statements")
+async def list_bank_statements() -> dict:
+    results = db.list_bank_statements()
+    return {"statements": results, "total": len(results)}
+
+
+@app.get("/api/bank/statement/{stem}/meta", summary="Get bank statement metadata")
+async def get_bank_statement_meta(stem: str) -> dict:
+    rows = db.list_bank_statements()
+    meta = next((r for r in rows if r["stem"] == stem), None)
+    if not meta:
+        raise HTTPException(status_code=404, detail=f"Bank statement '{stem}' not found")
+    return meta
+
+
+@app.get("/api/bank/statement/{stem}", summary="Get extracted bank statement JSON")
+async def get_bank_statement(stem: str) -> dict:
+    data = db.get_bank_statement(stem)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Bank statement '{stem}' not found")
+    return data
+
+
+@app.get("/api/bank/raw/{stem}", summary="Get raw OCR text for a bank statement")
+async def get_bank_raw_text(stem: str) -> dict:
+    path = config.BANK_RAW_DATA_DIR / f"{stem}.txt"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Raw OCR text for '{stem}' not found")
+    return {"stem": stem, "text": path.read_text(encoding="utf-8")}
+
+
+# ---------------------------------------------------------------------------
+# Static file mounts (after all routes)
+# Directories must exist before StaticFiles is instantiated.
+# ---------------------------------------------------------------------------
+
+config.INVOICES_DIR.mkdir(parents=True, exist_ok=True)
+config.REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
+config.BANK_STATEMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 app.mount("/invoices", StaticFiles(directory=str(config.INVOICES_DIR)), name="invoices")
 app.mount("/reference", StaticFiles(directory=str(config.REFERENCE_DIR)), name="reference")
+app.mount("/bank-files", StaticFiles(directory=str(config.BANK_STATEMENTS_DIR)), name="bank_statements")
 
 # ---------------------------------------------------------------------------
 # Run directly

@@ -3,19 +3,27 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Upload, FileText, LogOut, ChevronLeft, Bot } from "lucide-react";
+import { LayoutDashboard, Upload, FileText, LogOut, ChevronLeft, Bot, Landmark } from "lucide-react";
 import { clearToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+const invoiceNavItems = [
   { href: "/dashboard", label: "Dashboard",       icon: LayoutDashboard },
   { href: "/process",   label: "Process Invoice",  icon: Upload },
   { href: "/invoices",  label: "Invoices",          icon: FileText },
 ];
 
+const bankNavItems = [
+  { href: "/bank-reconciliation", label: "Process Statement", icon: Upload },
+  { href: "/bank-statements",     label: "Bank Statements",   icon: FileText },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
+
+  const isBankContext = pathname.startsWith("/bank-");
+  const navItems      = isBankContext ? bankNavItems : invoiceNavItems;
 
   function handleLogout() {
     clearToken();
@@ -52,11 +60,17 @@ export default function Sidebar() {
 
         {/* Agent section label */}
         <div className="flex items-center gap-2 px-3 mb-2">
-          <div className="w-5 h-5 rounded-md bg-violet-100 flex items-center justify-center flex-shrink-0">
-            <Bot className="w-3 h-3 text-violet-600" />
+          <div className={cn(
+            "w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0",
+            isBankContext ? "bg-emerald-100" : "bg-violet-100"
+          )}>
+            {isBankContext
+              ? <Landmark className="w-3 h-3 text-emerald-600" />
+              : <Bot className="w-3 h-3 text-violet-600" />
+            }
           </div>
           <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 truncate">
-            Invoice OCR Agent
+            {isBankContext ? "Bank Reconciliation" : "Invoice OCR Agent"}
           </span>
         </div>
 
@@ -64,18 +78,18 @@ export default function Sidebar() {
         <div className="ml-3 pl-3 border-l border-slate-100 space-y-0.5">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
+            const activeColor = isBankContext ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-violet-50 text-violet-700 border border-violet-200";
+            const activeIcon  = isBankContext ? "text-emerald-600" : "text-violet-600";
             return (
               <Link
                 key={href}
                 href={href}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                  active
-                    ? "bg-violet-50 text-violet-700 border border-violet-200"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                  active ? activeColor : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                 )}
               >
-                <Icon className={cn("w-4 h-4", active ? "text-violet-600" : "text-slate-400")} />
+                <Icon className={cn("w-4 h-4", active ? activeIcon : "text-slate-400")} />
                 {label}
               </Link>
             );

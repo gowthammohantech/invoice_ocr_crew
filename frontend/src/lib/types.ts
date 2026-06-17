@@ -92,6 +92,54 @@ export interface Job {
   error?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Bank Reconciliation Statement types
+// ---------------------------------------------------------------------------
+
+export interface BankStatementSummary {
+  stem: string;
+  status: "pass" | "failed";
+  filename: string;
+  created_at?: string;
+}
+
+export interface BankTransaction {
+  date?: string;
+  value_date?: string;
+  description: string;
+  reference?: string;
+  debit?: number | null;
+  credit?: number | null;
+  balance?: number | null;
+}
+
+export interface BankStatementDetail {
+  bank_name?: string;
+  account_number?: string;
+  account_holder?: string;
+  account_type?: string;
+  ifsc_code?: string;
+  branch?: string;
+  address?: string;
+  statement_from?: string;
+  statement_to?: string;
+  currency?: string;
+  opening_balance?: number | null;
+  closing_balance?: number | null;
+  total_debits?: number | null;
+  total_credits?: number | null;
+  transactions: BankTransaction[];
+  validation?: ValidationResult;
+  confidence_score?: number | null;
+}
+
+export interface BankStatementMeta {
+  stem: string;
+  filename: string;
+  status: "pass" | "failed";
+  created_at: string;
+}
+
 export interface TraceEntry {
   trace_id: string;
   timestamp: string;

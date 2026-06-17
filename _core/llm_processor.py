@@ -37,6 +37,35 @@ def _file_to_base64_images(file_path: Path) -> list[str]:
     return results
 
 
+def _resolve_invoice_image_path(image_path: str, filename: Optional[str] = None) -> Path:
+    """Resolve agent-provided invoice paths to an actual local invoice file."""
+    candidates: list[Path] = []
+    raw_path = Path(image_path)
+
+    candidates.append(raw_path)
+    if not raw_path.is_absolute():
+        candidates.append(config.BASE_DIR / raw_path)
+        candidates.append(config.INVOICES_DIR / raw_path)
+
+    stems: list[str] = []
+    if raw_path.stem:
+        stems.append(raw_path.stem)
+    if filename:
+        name_stem = Path(filename).stem
+        if name_stem:
+            stems.append(name_stem)
+
+    for stem in dict.fromkeys(stems):
+        for suffix in config.SUPPORTED_EXTENSIONS:
+            candidates.append(config.INVOICES_DIR / f"{stem}{suffix}")
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate.resolve()
+
+    return raw_path
+
+
 def get_system_prompt() -> str:
     """
     Returns the system prompt with target JSON schema instructions.
@@ -107,6 +136,7 @@ def query_ollama(
     api_url: Optional[str] = None,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
+    timeout: int = 180,
 ) -> str:
     """
     Sends request to an Ollama instance (local or remote cloud).
@@ -143,7 +173,7 @@ def query_ollama(
     }
 
     try:
-        response = requests.post(_url, json=payload, headers=headers, timeout=60)
+        response = requests.post(_url, json=payload, headers=headers, timeout=timeout)
 
         trace["response"] = {
             "status_code": response.status_code,
@@ -325,7 +355,9 @@ def parse_invoice_text(
     images: Optional[list[str]] = None
     if config.LLM_SEND_IMAGE and image_path:
         try:
-            images = _file_to_base64_images(Path(image_path))
+            resolved_image_path = _resolve_invoice_image_path(image_path, filename)
+            trace["vision_image_path"] = str(resolved_image_path)
+            images = _file_to_base64_images(resolved_image_path)
             print(f"Vision: sending {len(images)} image(s) alongside OCR text.")
             trace["vision_images_sent"] = len(images)
         except Exception as e:

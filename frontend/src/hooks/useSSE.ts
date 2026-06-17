@@ -5,9 +5,7 @@ import { getToken } from "@/lib/auth";
 import { SSEEvent } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const SESSION_KEY = "invoice_sse_session";
-
-export function useSSE() {
+export function useSSE(sessionKey = "invoice_sse_session") {
   const [events, setEvents]       = useState<SSEEvent[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isDone, setIsDone]       = useState(false);
@@ -16,7 +14,7 @@ export function useSSE() {
   // Restore persisted events on mount (for tab-switch resilience)
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
+      const raw = sessionStorage.getItem(sessionKey);
       if (raw) {
         const s: { events: SSEEvent[]; isDone: boolean } = JSON.parse(raw);
         if (s.events?.length) setEvents(s.events);
@@ -29,7 +27,7 @@ export function useSSE() {
   useEffect(() => {
     if (events.length === 0 && !isDone) return;
     try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ events, isDone }));
+      sessionStorage.setItem(sessionKey, JSON.stringify({ events, isDone }));
     } catch {}
   }, [events, isDone]);
 
@@ -46,7 +44,7 @@ export function useSSE() {
     setEvents([]);
     setIsDone(false);
     setIsStreaming(true);
-    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+    try { sessionStorage.removeItem(sessionKey); } catch {}
 
     const token = getToken();
     const url   = `${API_BASE}${streamUrl}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
@@ -89,7 +87,7 @@ export function useSSE() {
     setEvents([]);
     setIsDone(false);
     setIsStreaming(false);
-    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+    try { sessionStorage.removeItem(sessionKey); } catch {}
   }, []);
 
   return { events, isStreaming, isDone, start, stop, reset };

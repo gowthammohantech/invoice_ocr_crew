@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Bot, FileSearch, ArrowRight, LogOut } from "lucide-react";
+import { Bot, FileSearch, ArrowRight, LogOut, Landmark } from "lucide-react";
 import { clearToken, getToken } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -30,12 +30,22 @@ const AGENTS: Agent[] = [
     badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
     active: true,
   },
+  {
+    id: "bank-reconciliation",
+    name: "Bank Reconciliation Agent",
+    description:
+      "Processes bank statements end-to-end: extracts transactions via OCR, parses them with an LLM, and runs 5 balance reconciliation checks.",
+    href: "/bank-reconciliation",
+    icon: Landmark,
+    color: "from-emerald-500 to-teal-600",
+    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    active: true,
+  },
 ];
 
 const COMING_SOON = [
   { name: "Contract Review Agent", desc: "Extract clauses, obligations and risk flags from legal contracts." },
   { name: "Purchase Order Agent", desc: "Match POs to invoices and flag discrepancies automatically." },
-  { name: "Bank Statement Agent", desc: "Reconcile bank transactions and categorise expenses." },
 ];
 
 export default function AgentsHome() {

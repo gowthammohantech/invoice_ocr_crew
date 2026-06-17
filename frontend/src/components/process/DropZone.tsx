@@ -82,7 +82,7 @@ export default function DropZone({ onFile, disabled }: Props) {
             <Upload className="w-6 h-6 text-violet-600" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-slate-700">Drop invoice here or click to browse</p>
+            <p className="text-sm font-medium text-slate-700">Drop here or click to browse</p>
             <p className="text-xs text-slate-400 mt-1">PDF, PNG, JPG, HEIC, TIFF, WebP</p>
           </div>
         </button>
